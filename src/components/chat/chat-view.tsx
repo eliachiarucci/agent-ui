@@ -1,42 +1,17 @@
-import { useMemo } from "react"
-import { useChat } from "@ai-sdk/react"
-import { DefaultChatTransport, type UIMessage } from "ai"
+import { useChat, type Chat } from "@ai-sdk/react"
 import { MessageList } from "@/components/chat/message-list"
 import { ChatInput } from "@/components/chat/chat-input"
+import { StatusBar } from "@/components/chat/status-bar"
 import { EmptyState } from "@/components/chat/empty-state"
-import { isVisibleTextPart } from "@/lib/api"
+import type { AgentUIMessage } from "@/lib/api"
 
 type ChatViewProps = {
-  conversationId: string
-  initialMessages: UIMessage[]
-  onConversationSettled: () => void
+  // Owned and cached by App so the stream survives switching conversations.
+  chat: Chat<AgentUIMessage>
 }
 
-export function ChatView({ conversationId, initialMessages, onConversationSettled }: ChatViewProps) {
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport<UIMessage>({
-        api: "/agent/conversation",
-        // The backend expects {message, conversation_id} and rebuilds history server-side.
-        prepareSendMessagesRequest: ({ id, messages }) => {
-          const last = messages[messages.length - 1]
-          const text =
-            last?.parts
-              .filter(isVisibleTextPart)
-              .map((p) => p.text)
-              .join("\n") ?? ""
-          return { body: { message: text, conversation_id: id } }
-        },
-      }),
-    []
-  )
-
-  const { messages, sendMessage, status, error, stop } = useChat({
-    id: conversationId,
-    messages: initialMessages,
-    transport,
-    onFinish: () => onConversationSettled(),
-  })
+export function ChatView({ chat }: ChatViewProps) {
+  const { messages, sendMessage, status, error, stop } = useChat({ chat })
 
   const busy = status === "submitted" || status === "streaming"
 
@@ -48,6 +23,7 @@ export function ChatView({ conversationId, initialMessages, onConversationSettle
         <MessageList messages={messages} status={status} error={error} />
       )}
       <ChatInput busy={busy} onSend={(text) => void sendMessage({ text })} onStop={() => void stop()} />
+      <StatusBar messages={messages} />
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Brain, MessageSquare, Plus, Sparkles, Trash2 } from "lucide-react"
+import { Brain, MessageSquare, PanelLeftClose, Plus, Sparkles, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
@@ -18,6 +18,10 @@ import { conversationTitle, type Conversation } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 type AppSidebarProps = {
+  open: boolean
+  // On mobile the sidebar floats over the chat instead of taking layout space.
+  overlay: boolean
+  onCollapse: () => void
   conversations: Conversation[]
   loading: boolean
   activeId: string
@@ -28,6 +32,9 @@ type AppSidebarProps = {
 }
 
 export function AppSidebar({
+  open,
+  overlay,
+  onCollapse,
   conversations,
   loading,
   activeId,
@@ -39,12 +46,27 @@ export function AppSidebar({
   const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null)
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground">
+    <aside
+      className={cn(
+        "flex h-full w-72 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground",
+        overlay && "fixed inset-y-0 left-0 z-50",
+        // Hidden (not unmounted) so the conversation list keeps its scroll position.
+        !open && "hidden"
+      )}
+    >
       <div className="flex items-center gap-2 px-4 py-4">
         <Sparkles className="size-5 text-sidebar-primary" />
         <span className="font-heading text-lg font-semibold">Agent</span>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-1">
           <ThemeToggle />
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Collapse sidebar"
+            onClick={onCollapse}
+          >
+            <PanelLeftClose className="size-4" />
+          </Button>
         </div>
       </div>
 

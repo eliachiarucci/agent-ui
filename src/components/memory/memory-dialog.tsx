@@ -3,7 +3,6 @@ import { Brain, Pin, Plus, Search } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -26,7 +25,7 @@ import {
 import { MemoryCard } from "@/components/memory/memory-card"
 import { MemoryForm } from "@/components/memory/memory-form"
 import { useMemories } from "@/hooks/use-memories"
-import type { Memory, MemoryInput } from "@/lib/api"
+import type { Memory, MemoryCategory, MemoryInput } from "@/lib/api"
 
 type MemoryDialogProps = {
   open: boolean
@@ -38,18 +37,33 @@ export function MemoryDialog({ open, onOpenChange }: MemoryDialogProps) {
   const [editing, setEditing] = useState<Memory | null>(null)
   const [creating, setCreating] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<Memory | null>(null)
+  const [category, setCategory] = useState<MemoryCategory | "all">("all")
 
-  const { pinned, byCategory } = useMemo(() => {
-    const pinned = memories.filter((m) => m.pinned)
-    const rest = memories.filter((m) => !m.pinned)
+  // Chips are built from the categories actually present in the loaded
+  // memories; the active filter stays listed even when a search empties it,
+  // so it can always be deselected.
+  const categories = useMemo(() => {
+    const present = new Set(memories.map((m) => m.category))
+    if (category !== "all") present.add(category)
+    return [...present].sort()
+  }, [memories, category])
+
+  const { pinned, byCategory, visibleCount } = useMemo(() => {
+    const visible = category === "all" ? memories : memories.filter((m) => m.category === category)
+    const pinned = visible.filter((m) => m.pinned)
+    const rest = visible.filter((m) => !m.pinned)
     const byCategory = new Map<string, Memory[]>()
     for (const m of rest) {
       const list = byCategory.get(m.category) ?? []
       list.push(m)
       byCategory.set(m.category, list)
     }
-    return { pinned, byCategory: [...byCategory.entries()].sort(([a], [b]) => a.localeCompare(b)) }
-  }, [memories])
+    return {
+      pinned,
+      byCategory: [...byCategory.entries()].sort(([a], [b]) => a.localeCompare(b)),
+      visibleCount: visible.length,
+    }
+  }, [memories, category])
 
   const handleError = (action: string) => (error: unknown) => {
     toast.error(`Failed to ${action} memory`, {
@@ -84,7 +98,8 @@ export function MemoryDialog({ open, onOpenChange }: MemoryDialogProps) {
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-2xl">
+        {/* Fixed height so the dialog doesn't resize as search/filters change the list. */}
+        <DialogContent className="flex h-[min(85vh,44rem)] flex-col sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Brain className="size-5" />
@@ -111,7 +126,33 @@ export function MemoryDialog({ open, onOpenChange }: MemoryDialogProps) {
             </Button>
           </div>
 
-          <ScrollArea className="min-h-0 flex-1 pr-3">
+          {categories.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              <Button
+                size="xs"
+                variant={category === "all" ? "default" : "outline"}
+                className="rounded-full"
+                onClick={() => setCategory("all")}
+              >
+                All
+              </Button>
+              {categories.map((c) => (
+                <Button
+                  key={c}
+                  size="xs"
+                  variant={category === c ? "default" : "outline"}
+                  className="rounded-full capitalize"
+                  onClick={() => setCategory(category === c ? "all" : c)}
+                >
+                  {c}
+                </Button>
+              ))}
+            </div>
+          )}
+
+          {/* Plain overflow div: Radix ScrollArea's display:table viewport doesn't
+              constrain height inside the flex dialog, so it never scrolls. */}
+          <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             <div className="flex flex-col gap-4 py-1">
               {loading && (
                 <div className="flex flex-col gap-2">
@@ -121,10 +162,10 @@ export function MemoryDialog({ open, onOpenChange }: MemoryDialogProps) {
                 </div>
               )}
 
-              {!loading && memories.length === 0 && (
+              {!loading && visibleCount === 0 && (
                 <p className="py-10 text-center text-sm text-muted-foreground">
-                  {query
-                    ? "No memories match your search."
+                  {query || category !== "all"
+                    ? "No memories match your filters."
                     : "No memories yet. Chat with your agent or add one by hand."}
                 </p>
               )}
@@ -171,7 +212,7 @@ export function MemoryDialog({ open, onOpenChange }: MemoryDialogProps) {
                   </section>
                 ))}
             </div>
-          </ScrollArea>
+          </div>
         </DialogContent>
       </Dialog>
 

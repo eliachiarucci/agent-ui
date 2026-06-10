@@ -43,7 +43,7 @@ export function MessageList({ messages, status, error }: MessageListProps) {
 
   return (
     <div ref={containerRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6">
+      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6">
         {messages.map((message) => (
           <Message key={message.id} message={message} />
         ))}

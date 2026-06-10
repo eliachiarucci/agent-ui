@@ -21,7 +21,7 @@ export function ChatInput({ busy, onSend, onStop }: ChatInputProps) {
 
   return (
     <div className="border-t bg-background px-4 py-3">
-      <div className="mx-auto flex w-full max-w-3xl items-end gap-2">
+      <div className="mx-auto flex w-full max-w-4xl items-end gap-2">
         <Textarea
           value={value}
           onChange={(e) => setValue(e.target.value)}
@@ -32,16 +32,18 @@ export function ChatInput({ busy, onSend, onStop }: ChatInputProps) {
             }
           }}
           placeholder="Message your agent… (Enter to send, Shift+Enter for a new line)"
-          className="max-h-40 min-h-11 flex-1 resize-none"
+          // py-3 makes a single text-sm line fill min-h-11 exactly, so the text
+          // sits vertically centered in the empty input.
+          className="max-h-40 min-h-11 flex-1 resize-none py-3"
           rows={1}
           autoFocus
         />
         {busy ? (
-          <Button size="icon" variant="outline" aria-label="Stop generating" onClick={onStop}>
+          <Button size="icon" variant="outline" aria-label="Stop generating" className="size-11" onClick={onStop}>
             <Square className="size-4" />
           </Button>
         ) : (
-          <Button size="icon" aria-label="Send message" disabled={!value.trim()} onClick={submit}>
+          <Button size="icon" aria-label="Send message" className="size-11" disabled={!value.trim()} onClick={submit}>
             <ArrowUp className="size-4" />
           </Button>
         )}

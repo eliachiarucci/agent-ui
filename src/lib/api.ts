@@ -3,6 +3,19 @@ import type { UIMessage } from "ai"
 // Routes are served by the agent backend (proxied via Vite: /agent -> localhost:3001).
 const CONVERSATIONS_URL = "/agent/conversation"
 const MEMORIES_URL = "/agent/memory"
+const CONTEXT_URL = "/agent/context"
+
+// The backend attaches per-step token usage to assistant messages (see
+// conversation.ts messageMetadata); the latest one is the current context size.
+export type UsageMetadata = {
+  usage?: {
+    inputTokens?: number
+    outputTokens?: number
+    totalTokens?: number
+  }
+}
+
+export type AgentUIMessage = UIMessage<UsageMetadata>
 
 // Rows written before the UI message stream migration only have {role, content}.
 export type LegacyMessage = { role: "user" | "assistant"; content: string }
@@ -48,10 +61,10 @@ export function isVisibleTextPart(
   return part.type === "text" && !part.text.startsWith("<relevant-memories>")
 }
 
-export function toUIMessages(stored: StoredMessage[]): UIMessage[] {
+export function toUIMessages(stored: StoredMessage[]): AgentUIMessage[] {
   return stored.map((m, i) =>
     "parts" in m
-      ? m
+      ? (m as AgentUIMessage)
       : { id: `legacy-${i}`, role: m.role, parts: [{ type: "text", text: m.content }] }
   )
 }
@@ -83,6 +96,15 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 
 export function listConversations(): Promise<Conversation[]> {
   return request<Conversation[]>(CONVERSATIONS_URL)
+}
+
+export type ContextWindow = {
+  model: string
+  contextLength: number | null
+}
+
+export function getContextWindow(): Promise<ContextWindow> {
+  return request<ContextWindow>(CONTEXT_URL)
 }
 
 export function deleteConversation(id: string): Promise<void> {
