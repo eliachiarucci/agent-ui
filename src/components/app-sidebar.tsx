@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Brain, MessageSquare, PanelLeftClose, Plus, Settings, Trash2, Users } from "lucide-react"
+import { Brain, FolderOpen, MessageSquare, PanelLeftClose, Plus, Settings, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
@@ -33,6 +33,7 @@ type AppSidebarProps = {
   onNewChat: () => void
   onDelete: (id: string) => void
   onOpenMemories: () => void
+  onOpenFiles: () => void
   onOpenSettings: () => void
 }
 
@@ -50,6 +51,7 @@ export function AppSidebar({
   onNewChat,
   onDelete,
   onOpenMemories,
+  onOpenFiles,
   onOpenSettings,
 }: AppSidebarProps) {
   const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null)
@@ -158,6 +160,10 @@ export function AppSidebar({
         <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenMemories}>
           <Brain className="size-4" />
           Memories
+        </Button>
+        <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenFiles}>
+          <FolderOpen className="size-4" />
+          Files
         </Button>
       </div>
 

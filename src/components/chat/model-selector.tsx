@@ -37,7 +37,9 @@ export function ModelSelector({ fallbackModel }: { fallbackModel?: string }) {
   // the default model server-side; reflect that here instead of lying.
   const activeConfigured =
     active && providers.some((p) => p.provider === active.provider) ? active : null
-  const label = activeConfigured ? activeConfigured.model : (fallbackModel ?? "model")
+  const label = activeConfigured
+    ? `${PROVIDER_LABELS[activeConfigured.provider]} · ${activeConfigured.model}`
+    : (fallbackModel ?? "model")
 
   const toggleProvider = async (config: ProviderConfig) => {
     const provider = config.provider

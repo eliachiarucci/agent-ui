@@ -1,8 +1,11 @@
-import { useEffect, useMemo, useState } from "react"
-import { PanelLeft, Sparkles } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useChat } from "@ai-sdk/react"
+import { FileText, PanelLeft, Sparkles } from "lucide-react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { ChatView } from "@/components/chat/chat-view"
 import { MemoryDialog } from "@/components/memory/memory-dialog"
+import { FilesDialog } from "@/components/files/files-dialog"
+import { FileViewer } from "@/components/files/file-viewer"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { LoginPage } from "@/components/auth/login-page"
 import { Button } from "@/components/ui/button"
@@ -12,6 +15,8 @@ import { useIsMobile } from "@/hooks/use-is-mobile"
 import { toUIMessages } from "@/lib/api"
 import { authClient } from "@/lib/auth-client"
 import { discardChat, getChat, setChatOptions } from "@/lib/chat"
+import { chatFileNames, latestPresentedFile } from "@/lib/chat-files"
+import { FileViewerContext } from "@/lib/file-viewer-context"
 import { randomUUID } from "@/lib/uuid"
 
 // Session gate: the workspace (and its data hooks) only mounts when signed in,
@@ -50,9 +55,33 @@ function Workspace() {
   // Private/shared choice for the next conversation; fixed server-side at creation.
   const [newChatShared, setNewChatShared] = useState(false)
   const [memoriesOpen, setMemoriesOpen] = useState(false)
+  const [filesOpen, setFilesOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
+
+  // File viewer: which file (tab) is selected and whether the panel shows.
+  // Open state is separate so closing the panel keeps the floating reopen
+  // button available.
+  const [activeFile, setActiveFile] = useState<string | null>(null)
+  const [viewerOpen, setViewerOpen] = useState(false)
+  // Last presentFile call already handled: re-renders and history re-scans
+  // must not reopen a viewer the user closed.
+  const handledPresentCall = useRef<string | null>(null)
+
+  const resetViewer = () => {
+    handledPresentCall.current = null
+    setActiveFile(null)
+    setViewerOpen(false)
+  }
+
+  // Tool-chip View buttons (via FileViewerContext) and presentFile auto-open
+  // both land here.
+  const viewFile = useCallback((name: string) => {
+    setActiveFile(name)
+    setViewerOpen(true)
+  }, [])
+  const fileViewerActions = useMemo(() => ({ viewFile }), [viewFile])
 
   // Keep the sidebar in sync when the viewport crosses the mobile breakpoint.
   useEffect(() => {
@@ -77,6 +106,27 @@ function Workspace() {
     )
   }, [activeId, conversations, refresh])
 
+  // Second subscriber to the same Chat instance as ChatView: the workspace
+  // derives the file-viewer state (tabs, presentFile auto-open) from the
+  // live message stream.
+  const { messages } = useChat({ chat })
+  const chatFiles = useMemo(() => chatFileNames(messages), [messages])
+  const latestPresented = useMemo(() => latestPresentedFile(messages), [messages])
+
+  // Auto-open on the newest presentFile call — once per tool call, so a viewer
+  // the user closed stays closed until the agent presents again. Also fires on
+  // mount, restoring the last presented file when reopening a conversation.
+  useEffect(() => {
+    if (!latestPresented || handledPresentCall.current === latestPresented.toolCallId) return
+    handledPresentCall.current = latestPresented.toolCallId
+    viewFile(latestPresented.name)
+  }, [latestPresented, viewFile])
+
+  // The selected tab, falling back to the newest file when the selection
+  // doesn't exist in this conversation.
+  const viewedFile =
+    activeFile && chatFiles.includes(activeFile) ? activeFile : chatFiles.at(-1)
+
   // Puts a brand-new conversation in the sidebar the moment its first message
   // is sent (the backend persists the row before streaming, so the id is
   // already real); existing conversations are deduped by the hook.
@@ -97,6 +147,7 @@ function Workspace() {
   const handleSelect = (id: string) => {
     setActiveId(id)
     setNewChatShared(false)
+    resetViewer()
     if (isMobile) setSidebarOpen(false)
   }
 
@@ -107,6 +158,7 @@ function Workspace() {
     selectAgent(id)
     setActiveId(randomUUID())
     setNewChatShared(false)
+    resetViewer()
   }
 
   // The hook already selects the new agent; start a fresh chat in it.
@@ -115,6 +167,7 @@ function Workspace() {
     if (!agent) return false
     setActiveId(randomUUID())
     setNewChatShared(false)
+    resetViewer()
     return true
   }
 
@@ -127,6 +180,7 @@ function Workspace() {
       discardChat(activeId)
       setActiveId(randomUUID())
       setNewChatShared(false)
+      resetViewer()
     }
     return deleted
   }
@@ -134,7 +188,10 @@ function Workspace() {
   const handleDelete = (id: string) => {
     void remove(id)
     discardChat(id)
-    if (id === activeId) setActiveId(randomUUID())
+    if (id === activeId) {
+      setActiveId(randomUUID())
+      resetViewer()
+    }
   }
 
   return (
@@ -161,6 +218,7 @@ function Workspace() {
         onNewChat={() => handleSelect(randomUUID())}
         onDelete={handleDelete}
         onOpenMemories={() => setMemoriesOpen(true)}
+        onOpenFiles={() => setFilesOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -176,16 +234,50 @@ function Workspace() {
             <PanelLeft className="size-4" />
           </Button>
         )}
-        <ChatView
-          key={activeId}
-          chat={chat}
-          shared={newChatShared}
-          onSharedChange={setNewChatShared}
-          onMessageSent={handleMessageSent}
-        />
+        {viewedFile && !viewerOpen && (
+          <Button
+            variant="outline"
+            size="icon"
+            aria-label="Open file viewer"
+            className="absolute top-2 right-2 z-10 shadow-sm"
+            onClick={() => setViewerOpen(true)}
+          >
+            <FileText className="size-4" />
+          </Button>
+        )}
+        {/* Renderless provider: gives the tool chips inside the chat a way to
+            open the file viewer. */}
+        <FileViewerContext.Provider value={fileViewerActions}>
+          <ChatView
+            key={activeId}
+            chat={chat}
+            shared={newChatShared}
+            onSharedChange={setNewChatShared}
+            onMessageSent={handleMessageSent}
+          />
+        </FileViewerContext.Provider>
       </main>
 
+      {isMobile && viewerOpen && viewedFile && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50"
+          aria-hidden
+          onClick={() => setViewerOpen(false)}
+        />
+      )}
+      {viewerOpen && viewedFile && (
+        <FileViewer
+          conversationId={activeId}
+          files={chatFiles}
+          activeFile={viewedFile}
+          onSelectFile={setActiveFile}
+          overlay={isMobile}
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
+
       <MemoryDialog open={memoriesOpen} onOpenChange={setMemoriesOpen} />
+      <FilesDialog open={filesOpen} onOpenChange={setFilesOpen} agentId={activeAgentId} />
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}

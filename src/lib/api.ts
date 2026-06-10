@@ -3,6 +3,8 @@ import type { UIMessage } from "ai"
 // Routes are served by the agent backend (proxied via Vite: /agent -> localhost:3001).
 const CONVERSATIONS_URL = "/agent/conversation"
 const MEMORIES_URL = "/agent/memory"
+const FILES_URL = "/agent/files"
+const FILE_DOWNLOAD_URL = "/agent/files/download"
 const CONTEXT_URL = "/agent/context"
 const AGENTS_URL = "/agent/agents"
 const PROVIDERS_URL = "/agent/providers"
@@ -217,6 +219,43 @@ export function updateMemory(id: string, input: Partial<MemoryInput>): Promise<M
 
 export function deleteMemory(id: string): Promise<void> {
   return request<void>(`${MEMORIES_URL}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+// ── Files ───────────────────────────────────────────────────────────────────
+
+// A file the agent saved in a conversation's folder. The backend lists them
+// flat across every conversation the viewer can see in the agent.
+export type StoredFile = {
+  conversationId: string
+  name: string
+  size: number
+  updatedAt: string
+}
+
+export function listFiles(agentId?: string): Promise<StoredFile[]> {
+  const url = agentId ? `${FILES_URL}?agent_id=${encodeURIComponent(agentId)}` : FILES_URL
+  return request<StoredFile[]>(url)
+}
+
+// Plain href, no fetch: the browser handles the attachment download itself.
+export function fileDownloadUrl(file: Pick<StoredFile, "conversationId" | "name">): string {
+  return `${FILE_DOWNLOAD_URL}?conversation_id=${encodeURIComponent(file.conversationId)}&name=${encodeURIComponent(file.name)}`
+}
+
+export type FileContent = {
+  name: string
+  content: string
+  size: number
+  updatedAt: string
+}
+
+// Backs the file viewer; it polls this and re-renders when updatedAt moves.
+export function getFileContent(
+  file: Pick<StoredFile, "conversationId" | "name">
+): Promise<FileContent> {
+  return request<FileContent>(
+    `${FILES_URL}/content?conversation_id=${encodeURIComponent(file.conversationId)}&name=${encodeURIComponent(file.name)}`
+  )
 }
 
 // ── Model providers ─────────────────────────────────────────────────────────
