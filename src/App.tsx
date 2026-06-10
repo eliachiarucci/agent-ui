@@ -12,6 +12,7 @@ import { useIsMobile } from "@/hooks/use-is-mobile"
 import { toUIMessages } from "@/lib/api"
 import { authClient } from "@/lib/auth-client"
 import { discardChat, getChat, setChatOptions } from "@/lib/chat"
+import { randomUUID } from "@/lib/uuid"
 
 // Session gate: the workspace (and its data hooks) only mounts when signed in,
 // and unmounts again when the session ends (sign-out, expiry).
@@ -44,7 +45,7 @@ function Workspace() {
   const { agents, activeAgentId, selectAgent, create, update, remove: removeAgent } = useAgents()
   const { conversations, loading, refresh, remove } = useConversations(activeAgentId)
   // New chats get a client-generated id; the backend creates the row on first message.
-  const [activeId, setActiveId] = useState<string>(() => crypto.randomUUID())
+  const [activeId, setActiveId] = useState<string>(() => randomUUID())
   // Private/shared choice for the next conversation; fixed server-side at creation.
   const [newChatShared, setNewChatShared] = useState(false)
   const [memoriesOpen, setMemoriesOpen] = useState(false)
@@ -86,7 +87,7 @@ function Workspace() {
   const handleSelectAgent = (id: string) => {
     if (id === activeAgentId) return
     selectAgent(id)
-    setActiveId(crypto.randomUUID())
+    setActiveId(randomUUID())
     setNewChatShared(false)
   }
 
@@ -94,7 +95,7 @@ function Workspace() {
   const handleCreateAgent = async (name: string) => {
     const agent = await create(name)
     if (!agent) return false
-    setActiveId(crypto.randomUUID())
+    setActiveId(randomUUID())
     setNewChatShared(false)
     return true
   }
@@ -106,7 +107,7 @@ function Workspace() {
     const deleted = await removeAgent(id)
     if (deleted && wasActive) {
       discardChat(activeId)
-      setActiveId(crypto.randomUUID())
+      setActiveId(randomUUID())
       setNewChatShared(false)
     }
     return deleted
@@ -115,7 +116,7 @@ function Workspace() {
   const handleDelete = (id: string) => {
     void remove(id)
     discardChat(id)
-    if (id === activeId) setActiveId(crypto.randomUUID())
+    if (id === activeId) setActiveId(randomUUID())
   }
 
   return (
@@ -139,7 +140,7 @@ function Workspace() {
         activeAgentId={activeAgentId}
         onSelectAgent={handleSelectAgent}
         onSelect={handleSelect}
-        onNewChat={() => handleSelect(crypto.randomUUID())}
+        onNewChat={() => handleSelect(randomUUID())}
         onDelete={handleDelete}
         onOpenMemories={() => setMemoriesOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
