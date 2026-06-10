@@ -127,4 +127,15 @@
   html {
     @apply font-sans;
     }
+  /* Tailwind v4 preflight resets buttons to cursor: default; restore pointer for clickables. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="menuitem"],
+  [role="option"],
+  [role="tab"],
+  a,
+  label[for],
+  summary {
+    cursor: pointer;
+    }
 }

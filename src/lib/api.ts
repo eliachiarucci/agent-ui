@@ -39,6 +39,15 @@ export type Memory = {
   lastAccessedAt: string
 }
 
+// The server prepends a machine-inserted <relevant-memories> text part to user
+// messages (see agent/docs/memory.md); it is model context, not user input, and
+// must be excluded anywhere user text is displayed or echoed back to the server.
+export function isVisibleTextPart(
+  part: UIMessage["parts"][number]
+): part is Extract<UIMessage["parts"][number], { type: "text" }> {
+  return part.type === "text" && !part.text.startsWith("<relevant-memories>")
+}
+
 export function toUIMessages(stored: StoredMessage[]): UIMessage[] {
   return stored.map((m, i) =>
     "parts" in m
@@ -53,7 +62,7 @@ export function conversationTitle(conversation: Conversation): string {
     const text =
       "parts" in message
         ? message.parts
-            .filter((p) => p.type === "text")
+            .filter(isVisibleTextPart)
             .map((p) => p.text)
             .join(" ")
         : message.content

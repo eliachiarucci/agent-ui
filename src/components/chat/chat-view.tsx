@@ -4,6 +4,7 @@ import { DefaultChatTransport, type UIMessage } from "ai"
 import { MessageList } from "@/components/chat/message-list"
 import { ChatInput } from "@/components/chat/chat-input"
 import { EmptyState } from "@/components/chat/empty-state"
+import { isVisibleTextPart } from "@/lib/api"
 
 type ChatViewProps = {
   conversationId: string
@@ -21,7 +22,7 @@ export function ChatView({ conversationId, initialMessages, onConversationSettle
           const last = messages[messages.length - 1]
           const text =
             last?.parts
-              .filter((p) => p.type === "text")
+              .filter(isVisibleTextPart)
               .map((p) => p.text)
               .join("\n") ?? ""
           return { body: { message: text, conversation_id: id } }

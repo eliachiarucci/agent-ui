@@ -1,7 +1,6 @@
 import { useState } from "react"
 import { Brain, MessageSquare, Plus, Sparkles, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -56,7 +55,9 @@ export function AppSidebar({
         </Button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1 px-3 py-3">
+      {/* Plain overflow div: Radix ScrollArea's display:table viewport lets rows grow
+          wider than the sidebar, clipping the delete button and breaking truncation. */}
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <div className="flex flex-col gap-1">
           {loading &&
             Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-9 w-full" />)}
@@ -90,7 +91,12 @@ export function AppSidebar({
                 variant="ghost"
                 size="icon"
                 aria-label="Delete conversation"
-                className="mr-1 size-7 shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                className={cn(
+                  "mr-1 size-7 shrink-0 transition-opacity hover:text-destructive",
+                  conversation.id === activeId
+                    ? "opacity-60 hover:opacity-100"
+                    : "opacity-0 group-hover:opacity-60 group-hover:hover:opacity-100"
+                )}
                 onClick={() => setPendingDelete(conversation)}
               >
                 <Trash2 className="size-3.5" />
@@ -98,7 +104,7 @@ export function AppSidebar({
             </div>
           ))}
         </div>
-      </ScrollArea>
+      </div>
 
       <Separator />
       <div className="p-3">

@@ -3,13 +3,14 @@ import { TextPart } from "@/components/chat/parts/text-part"
 import { ReasoningPart } from "@/components/chat/parts/reasoning-part"
 import { ToolPart } from "@/components/chat/parts/tool-part"
 import { cn } from "@/lib/utils"
+import { isVisibleTextPart } from "@/lib/api"
 
 export function Message({ message }: { message: UIMessage }) {
   const isUser = message.role === "user"
 
   if (isUser) {
     const text = message.parts
-      .filter((p) => p.type === "text")
+      .filter(isVisibleTextPart)
       .map((p) => p.text)
       .join("\n")
     return (
