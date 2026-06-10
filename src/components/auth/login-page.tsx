@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { authClient, setTwoFactorHandler } from "@/lib/auth-client"
 
-type Mode = "sign-in" | "sign-up" | "totp"
+// Accounts are provisioned by the admin via the backend CLI; there is no signup.
+type Mode = "sign-in" | "totp"
 
 // Session state is owned by authClient.useSession() in App; successful auth
 // updates it and this page unmounts on its own.
@@ -24,8 +25,6 @@ export function LoginPage() {
 
   const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
-  const [name, setName] = useState("")
-  const [email, setEmail] = useState("")
   const [code, setCode] = useState("")
 
   const run = async (fn: () => Promise<{ error?: { message?: string } | null }>) => {
@@ -60,11 +59,6 @@ export function LoginPage() {
     await run(() => authClient.twoFactor.verifyTotp({ code }))
   }
 
-  const signUp = async (e: FormEvent) => {
-    e.preventDefault()
-    await run(() => authClient.signUp.email({ email, password, name, username }))
-  }
-
   const signInWithPasskey = async () => {
     setBusy(true)
     try {
@@ -84,11 +78,9 @@ export function LoginPage() {
           </div>
           <h1 className="font-heading text-2xl font-semibold">Agent</h1>
           <p className="text-sm text-muted-foreground">
-            {mode === "sign-up"
-              ? "Create your account"
-              : mode === "totp"
-                ? "Enter the code from your authenticator app"
-                : "Sign in to your account"}
+            {mode === "totp"
+              ? "Enter the code from your authenticator app"
+              : "Sign in to your account"}
           </p>
         </div>
 
@@ -129,73 +121,6 @@ export function LoginPage() {
               <Fingerprint className="size-4" />
               Sign in with a passkey
             </Button>
-            <p className="mt-2 text-center text-sm text-muted-foreground">
-              No account?{" "}
-              <button type="button" className="underline" onClick={() => setMode("sign-up")}>
-                Sign up
-              </button>
-            </p>
-          </form>
-        )}
-
-        {mode === "sign-up" && (
-          <form className="grid gap-3" onSubmit={signUp}>
-            <div className="grid gap-1.5">
-              <Label htmlFor="su-name">Name</Label>
-              <Input
-                id="su-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoComplete="name"
-                autoFocus
-                required
-              />
-              <p className="text-xs text-muted-foreground">
-                Shown to people you share agents with, and how the agent refers to you.
-              </p>
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="su-username">Username</Label>
-              <Input
-                id="su-username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                autoComplete="username"
-                required
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="su-email">Email</Label>
-              <Input
-                id="su-email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                autoComplete="email"
-                required
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="su-password">Password</Label>
-              <Input
-                id="su-password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="new-password"
-                minLength={8}
-                required
-              />
-            </div>
-            <Button type="submit" disabled={busy}>
-              Create account
-            </Button>
-            <p className="mt-2 text-center text-sm text-muted-foreground">
-              Already have an account?{" "}
-              <button type="button" className="underline" onClick={() => setMode("sign-in")}>
-                Sign in
-              </button>
-            </p>
           </form>
         )}
 

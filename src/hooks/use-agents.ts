@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { createAgent, listAgents, type Agent } from "@/lib/api"
+import { createAgent, deleteAgent, listAgents, updateAgent, type Agent } from "@/lib/api"
 
 const ACTIVE_AGENT_KEY = "agent-ui:active-agent"
 
@@ -55,7 +55,54 @@ export function useAgents() {
     [selectAgent]
   )
 
+  /** Updates the agent (owner-only). Returns false on failure (already toasted). */
+  const update = useCallback(
+    async (id: string, changes: { name?: string; systemPrompt?: string | null }) => {
+      try {
+        const updated = await updateAgent(id, changes)
+        setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updated } : a)))
+        return true
+      } catch (error) {
+        toast.error("Failed to update agent", {
+          description: error instanceof Error ? error.message : undefined,
+        })
+        return false
+      }
+    },
+    []
+  )
+
+  /**
+   * Deletes the agent (owner-only; cascades to its memories and conversations).
+   * If it was active, the first remaining agent becomes active.
+   * Returns false on failure (already toasted).
+   */
+  const remove = useCallback(
+    async (id: string): Promise<boolean> => {
+      try {
+        await deleteAgent(id)
+      } catch (error) {
+        toast.error("Failed to delete agent", {
+          description: error instanceof Error ? error.message : undefined,
+        })
+        return false
+      }
+      const remaining = agents.filter((a) => a.id !== id)
+      setAgents(remaining)
+      if (activeAgentId === id) {
+        if (remaining[0]) {
+          selectAgent(remaining[0].id)
+        } else {
+          setActiveAgentId(undefined)
+          localStorage.removeItem(ACTIVE_AGENT_KEY)
+        }
+      }
+      return true
+    },
+    [agents, activeAgentId, selectAgent]
+  )
+
   const activeAgent = agents.find((a) => a.id === activeAgentId)
 
-  return { agents, activeAgent, activeAgentId, selectAgent, create }
+  return { agents, activeAgent, activeAgentId, selectAgent, create, update, remove }
 }

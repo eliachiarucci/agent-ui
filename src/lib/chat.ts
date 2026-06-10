@@ -1,5 +1,6 @@
 import { Chat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
+import { getActiveModel } from "@/lib/active-model"
 import { isVisibleTextPart, type AgentUIMessage } from "@/lib/api"
 
 // Per-chat send options, set by the UI before the first message goes out. The
@@ -24,12 +25,15 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
         .map((p) => p.text)
         .join("\n") ?? ""
     const options = sendOptions.get(id)
+    // Read at send time so mid-conversation model switches apply to the next turn.
+    const active = getActiveModel()
     return {
       body: {
         message: text,
         conversation_id: id,
         ...(options?.agentId ? { agent_id: options.agentId } : {}),
         ...(options?.shared !== undefined ? { shared: options.shared } : {}),
+        ...(active ? { provider: active.provider, model: active.model } : {}),
       },
     }
   },

@@ -1,29 +1,47 @@
 import { useEffect, useState } from "react"
+import { useActiveModel } from "@/lib/active-model"
 import { getContextWindow, type ContextWindow } from "@/lib/api"
 
-// Module-level cache: the window only changes when a different model is loaded,
-// so one fetch per page load is enough and every ContextBar mount shares it.
-let cached: ContextWindow | null = null
-let pending: Promise<ContextWindow> | null = null
+// Module-level cache keyed by selection: the window only changes when a
+// different model is picked (or loaded), so every mount of the same selection
+// shares one fetch.
+const cache = new Map<string, ContextWindow>()
+const pending = new Map<string, Promise<ContextWindow>>()
 
 export function useContextWindow(): ContextWindow | null {
-  const [window, setWindow] = useState<ContextWindow | null>(cached)
+  const active = useActiveModel()
+  const key = active ? `${active.provider}:${active.model}` : "default"
+  const [window, setWindow] = useState<ContextWindow | null>(cache.get(key) ?? null)
 
   useEffect(() => {
-    if (cached) return
-    pending ??= getContextWindow().then((value) => (cached = value))
+    const cached = cache.get(key)
+    if (cached) {
+      setWindow(cached)
+      return
+    }
+    setWindow(null)
+    let promise = pending.get(key)
+    if (!promise) {
+      promise = getContextWindow(active ?? undefined).then((value) => {
+        cache.set(key, value)
+        return value
+      })
+      pending.set(key, promise)
+    }
     let cancelled = false
-    pending
+    promise
       .then((value) => {
         if (!cancelled) setWindow(value)
       })
       .catch(() => {
-        pending = null
+        pending.delete(key)
       })
     return () => {
       cancelled = true
     }
-  }, [])
+    // `key` fully encodes the selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key])
 
   return window
 }

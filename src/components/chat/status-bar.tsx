@@ -1,4 +1,5 @@
 import { useContextWindow } from "@/hooks/use-context-window"
+import { ModelSelector } from "@/components/chat/model-selector"
 import type { AgentUIMessage, UsageMetadata } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
@@ -21,7 +22,7 @@ function formatTokens(n: number): string {
 }
 
 // VSCode-style sub-bar at the very bottom of the chat: context usage on the
-// left, right side intentionally empty for future indicators.
+// left, model selector on the right.
 export function StatusBar({ messages }: StatusBarProps) {
   const window = useContextWindow()
   const usage = latestUsage(messages)
@@ -56,7 +57,7 @@ export function StatusBar({ messages }: StatusBarProps) {
           {ratio !== null && ` (${Math.round(ratio * 100)}%)`}
         </span>
       </div>
-      {/* Right side reserved for future status items. */}
+      <ModelSelector fallbackModel={window?.model} />
     </footer>
   )
 }

@@ -5,6 +5,8 @@ const CONVERSATIONS_URL = "/agent/conversation"
 const MEMORIES_URL = "/agent/memory"
 const CONTEXT_URL = "/agent/context"
 const AGENTS_URL = "/agent/agents"
+const PROVIDERS_URL = "/agent/providers"
+const PROVIDER_TEST_URL = "/agent/provider-test"
 
 // The backend attaches per-step token usage to assistant messages (see
 // conversation.ts messageMetadata); the latest one is the current context size.
@@ -38,6 +40,8 @@ export type Agent = {
   id: string
   ownerId: string
   name: string
+  // Owner-written instructions appended to the backend's system prompt.
+  systemPrompt: string | null
   createdAt: string
   role: "owner" | "member"
 }
@@ -103,7 +107,16 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init)
   if (!res.ok) {
     const body = await res.text().catch(() => "")
-    throw new Error(`Request failed (${res.status}): ${body || res.statusText}`)
+    // Backend errors are { error: string } — surface the message alone so
+    // toasts stay readable; fall back to the raw body for anything else.
+    let message = body
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown }
+      if (typeof parsed.error === "string") message = parsed.error
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(message || `Request failed (${res.status}): ${res.statusText}`)
   }
   return res.status === 204 ? (undefined as T) : res.json()
 }
@@ -129,13 +142,42 @@ export async function createAgent(name: string): Promise<Agent> {
   return { ...created, role: "owner" }
 }
 
+// Owner-only on the backend. The update route returns the bare row (no role).
+export function updateAgent(
+  id: string,
+  changes: { name?: string; systemPrompt?: string | null }
+): Promise<Omit<Agent, "role">> {
+  return request<Omit<Agent, "role">>(AGENTS_URL, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id,
+      ...(changes.name !== undefined && { name: changes.name }),
+      ...(changes.systemPrompt !== undefined && { system_prompt: changes.systemPrompt }),
+    }),
+  })
+}
+
+// Owner-only on the backend; cascades to the agent's memories, conversations,
+// and memberships.
+export function deleteAgent(id: string): Promise<void> {
+  return request<void>(`${AGENTS_URL}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
 export type ContextWindow = {
   model: string
   contextLength: number | null
 }
 
-export function getContextWindow(): Promise<ContextWindow> {
-  return request<ContextWindow>(CONTEXT_URL)
+// Without a target it reports the backend's env-configured default model.
+export function getContextWindow(target?: {
+  provider: ProviderType
+  model: string
+}): Promise<ContextWindow> {
+  const url = target
+    ? `${CONTEXT_URL}?provider=${encodeURIComponent(target.provider)}&model=${encodeURIComponent(target.model)}`
+    : CONTEXT_URL
+  return request<ContextWindow>(url)
 }
 
 export function deleteConversation(id: string): Promise<void> {
@@ -175,4 +217,61 @@ export function updateMemory(id: string, input: Partial<MemoryInput>): Promise<M
 
 export function deleteMemory(id: string): Promise<void> {
   return request<void>(`${MEMORIES_URL}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+// ── Model providers ─────────────────────────────────────────────────────────
+
+export type ProviderType = "lmstudio" | "anthropic"
+
+// What the user types into a provider card. apiKey may be omitted on updates:
+// the backend then reuses the stored key.
+export type ProviderSettingsInput = {
+  url?: string
+  apiKey?: string
+  model?: string
+}
+
+// Stored config as returned by the backend. API keys never come back; the
+// server only says whether one is stored.
+export type ProviderConfig = {
+  id: string
+  provider: ProviderType
+  settings: { url?: string; model?: string; hasApiKey: boolean }
+  createdAt: string
+  updatedAt: string
+}
+
+export function listProviders(): Promise<ProviderConfig[]> {
+  return request<ProviderConfig[]>(PROVIDERS_URL)
+}
+
+// Verifies the connection server-side without saving; returns the provider's
+// available models (used to populate the model picker).
+export function testProvider(
+  provider: ProviderType,
+  settings: ProviderSettingsInput
+): Promise<{ models: string[] }> {
+  return request<{ models: string[] }>(PROVIDER_TEST_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ provider, settings }),
+  })
+}
+
+// The backend re-tests the connection and saves only on success (422 otherwise).
+export function saveProvider(
+  provider: ProviderType,
+  settings: ProviderSettingsInput
+): Promise<{ provider: ProviderConfig; models: string[] }> {
+  return request<{ provider: ProviderConfig; models: string[] }>(PROVIDERS_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ provider, settings }),
+  })
+}
+
+export function deleteProvider(provider: ProviderType): Promise<void> {
+  return request<void>(`${PROVIDERS_URL}?provider=${encodeURIComponent(provider)}`, {
+    method: "DELETE",
+  })
 }

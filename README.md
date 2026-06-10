@@ -73,3 +73,14 @@ export default defineConfig([
   },
 ])
 ```
+
+## Docker
+
+The production image (built by the release workflow on tag push) serves the static build
+with nginx and reverse-proxies `/agent/*` to the backend container (`app:3001`) so the
+app and API share one origin — see `Dockerfile` and `nginx.conf`. Streaming responses
+rely on `proxy_buffering off`; keep it if you touch the proxy config.
+
+```sh
+docker build -t ghcr.io/eliachiarucci/agent-ui:dev .
+```

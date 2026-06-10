@@ -41,7 +41,7 @@ export default function App() {
 }
 
 function Workspace() {
-  const { agents, activeAgentId, selectAgent, create } = useAgents()
+  const { agents, activeAgentId, selectAgent, create, update, remove: removeAgent } = useAgents()
   const { conversations, loading, refresh, remove } = useConversations(activeAgentId)
   // New chats get a client-generated id; the backend creates the row on first message.
   const [activeId, setActiveId] = useState<string>(() => crypto.randomUUID())
@@ -97,6 +97,19 @@ function Workspace() {
     setActiveId(crypto.randomUUID())
     setNewChatShared(false)
     return true
+  }
+
+  // The hook switches to the first remaining agent; the open chat belonged to
+  // the deleted agent, so start fresh.
+  const handleDeleteAgent = async (id: string) => {
+    const wasActive = id === activeAgentId
+    const deleted = await removeAgent(id)
+    if (deleted && wasActive) {
+      discardChat(activeId)
+      setActiveId(crypto.randomUUID())
+      setNewChatShared(false)
+    }
+    return deleted
   }
 
   const handleDelete = (id: string) => {
@@ -160,6 +173,8 @@ function Workspace() {
         activeAgentId={activeAgentId}
         onSelectAgent={handleSelectAgent}
         onCreateAgent={handleCreateAgent}
+        onUpdateAgent={update}
+        onDeleteAgent={handleDeleteAgent}
       />
     </div>
   )
