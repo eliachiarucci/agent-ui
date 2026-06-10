@@ -4,6 +4,7 @@ import type { UIMessage } from "ai"
 const CONVERSATIONS_URL = "/agent/conversation"
 const MEMORIES_URL = "/agent/memory"
 const CONTEXT_URL = "/agent/context"
+const AGENTS_URL = "/agent/agents"
 
 // The backend attaches per-step token usage to assistant messages (see
 // conversation.ts messageMetadata); the latest one is the current context size.
@@ -23,9 +24,22 @@ export type StoredMessage = UIMessage | LegacyMessage
 
 export type Conversation = {
   id: string
+  agentId: string
+  // Creator. Shared conversations are visible to every member of the agent.
+  userId: string
+  shared: boolean
   messages: StoredMessage[]
   createdAt: string
   updatedAt: string
+}
+
+// An agent the current user can talk to; role is theirs ("owner" | "member").
+export type Agent = {
+  id: string
+  ownerId: string
+  name: string
+  createdAt: string
+  role: "owner" | "member"
 }
 
 export const MEMORY_CATEGORIES = [
@@ -94,8 +108,25 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.status === 204 ? (undefined as T) : res.json()
 }
 
-export function listConversations(): Promise<Conversation[]> {
-  return request<Conversation[]>(CONVERSATIONS_URL)
+export function listConversations(agentId?: string): Promise<Conversation[]> {
+  const url = agentId
+    ? `${CONVERSATIONS_URL}?agent_id=${encodeURIComponent(agentId)}`
+    : CONVERSATIONS_URL
+  return request<Conversation[]>(url)
+}
+
+export function listAgents(): Promise<Agent[]> {
+  return request<Agent[]>(AGENTS_URL)
+}
+
+export async function createAgent(name: string): Promise<Agent> {
+  // The create route returns the bare agent row; the creator is always its owner.
+  const created = await request<Omit<Agent, "role">>(AGENTS_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name }),
+  })
+  return { ...created, role: "owner" }
 }
 
 export type ContextWindow = {

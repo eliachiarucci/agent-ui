@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Brain, MessageSquare, PanelLeftClose, Plus, Sparkles, Trash2 } from "lucide-react"
+import { Brain, MessageSquare, PanelLeftClose, Plus, Settings, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
@@ -14,7 +14,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { ThemeToggle } from "@/components/theme-toggle"
-import { conversationTitle, type Conversation } from "@/lib/api"
+import { AgentSwitcher } from "@/components/agent-switcher"
+import { conversationTitle, type Agent, type Conversation } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 type AppSidebarProps = {
@@ -25,10 +26,14 @@ type AppSidebarProps = {
   conversations: Conversation[]
   loading: boolean
   activeId: string
+  agents: Agent[]
+  activeAgentId?: string
+  onSelectAgent: (id: string) => void
   onSelect: (id: string) => void
   onNewChat: () => void
   onDelete: (id: string) => void
   onOpenMemories: () => void
+  onOpenSettings: () => void
 }
 
 export function AppSidebar({
@@ -38,10 +43,14 @@ export function AppSidebar({
   conversations,
   loading,
   activeId,
+  agents,
+  activeAgentId,
+  onSelectAgent,
   onSelect,
   onNewChat,
   onDelete,
   onOpenMemories,
+  onOpenSettings,
 }: AppSidebarProps) {
   const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null)
 
@@ -54,10 +63,14 @@ export function AppSidebar({
         !open && "hidden"
       )}
     >
-      <div className="flex items-center gap-2 px-4 py-4">
-        <Sparkles className="size-5 text-sidebar-primary" />
-        <span className="font-heading text-lg font-semibold">Agent</span>
-        <div className="ml-auto flex items-center gap-1">
+      <div className="flex items-center gap-2 px-3 py-4">
+        <AgentSwitcher
+          agents={agents}
+          activeAgentId={activeAgentId}
+          onSelect={onSelectAgent}
+          className="min-w-0 flex-1"
+        />
+        <div className="flex items-center gap-1">
           <ThemeToggle />
           <Button
             variant="ghost"
@@ -106,7 +119,11 @@ export function AppSidebar({
                 className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm"
                 onClick={() => onSelect(conversation.id)}
               >
-                <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+                {conversation.shared ? (
+                  <Users className="size-4 shrink-0 text-muted-foreground" aria-label="Shared conversation" />
+                ) : (
+                  <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+                )}
                 <span className="truncate">{conversationTitle(conversation)}</span>
               </button>
               <Button
@@ -129,8 +146,16 @@ export function AppSidebar({
       </div>
 
       <Separator />
-      <div className="p-3">
-        <Button variant="outline" className="w-full justify-start gap-2" onClick={onOpenMemories}>
+      <div className="flex items-center gap-2 p-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Open settings"
+          onClick={onOpenSettings}
+        >
+          <Settings className="size-4" />
+        </Button>
+        <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenMemories}>
           <Brain className="size-4" />
           Memories
         </Button>

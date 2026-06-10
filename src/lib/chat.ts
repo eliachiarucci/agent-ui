@@ -2,6 +2,16 @@ import { Chat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { isVisibleTextPart, type AgentUIMessage } from "@/lib/api"
 
+// Per-chat send options, set by the UI before the first message goes out. The
+// backend only honors agent_id/shared when it creates the conversation row, so
+// sending them on every request is harmless for existing conversations.
+type ChatSendOptions = { agentId?: string; shared?: boolean }
+const sendOptions = new Map<string, ChatSendOptions>()
+
+export function setChatOptions(id: string, options: ChatSendOptions): void {
+  sendOptions.set(id, options)
+}
+
 // The transport is stateless, so a single instance is shared by every chat.
 const transport = new DefaultChatTransport<AgentUIMessage>({
   api: "/agent/conversation",
@@ -13,7 +23,15 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
         .filter(isVisibleTextPart)
         .map((p) => p.text)
         .join("\n") ?? ""
-    return { body: { message: text, conversation_id: id } }
+    const options = sendOptions.get(id)
+    return {
+      body: {
+        message: text,
+        conversation_id: id,
+        ...(options?.agentId ? { agent_id: options.agentId } : {}),
+        ...(options?.shared !== undefined ? { shared: options.shared } : {}),
+      },
+    }
   },
 })
 
@@ -37,4 +55,5 @@ export function getChat(
 
 export function discardChat(id: string): void {
   chats.delete(id)
+  sendOptions.delete(id)
 }
