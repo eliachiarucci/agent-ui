@@ -8,6 +8,9 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+# Release tag baked into the bundle (shown in Settings → General).
+ARG APP_VERSION=dev
+ENV VITE_APP_VERSION=$APP_VERSION
 RUN npm run build
 
 FROM nginx:1.29-alpine

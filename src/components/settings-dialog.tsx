@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Bot, Boxes, Plus, Trash2, UserRound } from "lucide-react"
+import { Bot, Boxes, Info, Plus, Trash2, UserRound } from "lucide-react"
 import {
   Dialog,
   DialogContent,
@@ -50,6 +50,7 @@ const TABS = [
   { id: "agent", label: "Agent", icon: Bot },
   { id: "models", label: "Models", icon: Boxes },
   { id: "account", label: "Account", icon: UserRound },
+  { id: "general", label: "General", icon: Info },
 ] as const
 
 type TabId = (typeof TABS)[number]["id"]
@@ -117,13 +118,33 @@ export function SettingsDialog({
               />
             ) : tab === "models" ? (
               <ModelsSettings />
-            ) : (
+            ) : tab === "account" ? (
               <AccountSettings />
+            ) : (
+              <GeneralTab />
             )}
           </div>
         </div>
       </DialogContent>
     </Dialog>
+  )
+}
+
+// Injected at image build time from the release tag (Dockerfile APP_VERSION
+// build arg); local dev has no tag and shows "dev".
+const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? "dev"
+
+function GeneralTab() {
+  return (
+    <div className="grid gap-4">
+      <div className="grid gap-2">
+        <Label>About</Label>
+        <div className="flex items-center justify-between rounded-md border px-3 py-2">
+          <span className="text-sm text-muted-foreground">Version</span>
+          <span className="font-mono text-sm">{APP_VERSION}</span>
+        </div>
+      </div>
+    </div>
   )
 }
 

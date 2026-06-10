@@ -25,6 +25,8 @@ jobs:
           context: .
           platforms: linux/amd64,linux/arm64
           push: true
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}
           tags: |
             ghcr.io/${{ github.repository_owner }}/agent-ui:${{ github.ref_name }}
             ghcr.io/${{ github.repository_owner }}/agent-ui:latest
