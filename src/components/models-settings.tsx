@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, ChevronDown, Loader2, Plug, Server, Sparkles, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Cloud, Gem, Loader2, Plug, Server, Sparkles, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,18 +14,41 @@ const PROVIDERS: Array<{
   name: string
   description: string
   icon: typeof Server
+  // Only LM Studio takes a URL; everyone else authenticates with just a key.
+  keyPlaceholder: string
+  keyHelp?: string
 }> = [
   {
     id: "lmstudio",
     name: "LM Studio",
     description: "Local models through LM Studio's OpenAI-compatible server.",
     icon: Server,
+    keyPlaceholder: "Only if your LM Studio server requires one",
   },
   {
     id: "anthropic",
     name: "Anthropic",
     description: "Claude models through the Anthropic API.",
     icon: Sparkles,
+    keyPlaceholder: "sk-ant-api...",
+    keyHelp:
+      "Create an API key in the Anthropic Console (console.anthropic.com). Claude Code setup tokens won't work here.",
+  },
+  {
+    id: "google",
+    name: "Google",
+    description: "Gemini models through the Gemini API.",
+    icon: Gem,
+    keyPlaceholder: "AIza...",
+    keyHelp: "Create an API key in Google AI Studio (aistudio.google.com).",
+  },
+  {
+    id: "deepinfra",
+    name: "DeepInfra",
+    description: "Open-source models through DeepInfra's inference cloud.",
+    icon: Cloud,
+    keyPlaceholder: "Your DeepInfra API key",
+    keyHelp: "Create an API key in the DeepInfra dashboard (deepinfra.com/dash/api_keys).",
   },
 ]
 
@@ -36,8 +59,9 @@ export function ModelsSettings() {
   if (loading) {
     return (
       <div className="grid gap-3">
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-16 w-full" />
+        {PROVIDERS.map((meta) => (
+          <Skeleton key={meta.id} className="h-16 w-full" />
+        ))}
       </div>
     )
   }
@@ -102,9 +126,10 @@ function ProviderCard({
     ...(apiKey.trim() && { apiKey: apiKey.trim() }),
   })
 
-  // Anthropic needs a key (typed now or already stored); LM Studio needs a URL.
-  const incomplete =
-    meta.id === "anthropic" ? !apiKey.trim() && !hasStoredKey : !url.trim()
+  // Key-only providers need a key (typed now or already stored); LM Studio
+  // needs a URL.
+  const needsKey = meta.id !== "lmstudio"
+  const incomplete = needsKey ? !apiKey.trim() && !hasStoredKey : !url.trim()
   const busy = testing || saving || removing
 
   const runTest = async () => {
@@ -175,7 +200,7 @@ function ProviderCard({
           <div className="grid gap-2">
             <Label htmlFor={`${meta.id}-key`}>
               API key
-              {meta.id === "lmstudio" && (
+              {!needsKey && (
                 <span className="font-normal text-muted-foreground"> (optional)</span>
               )}
             </Label>
@@ -187,17 +212,12 @@ function ProviderCard({
               placeholder={
                 hasStoredKey
                   ? "•••••••• (stored — leave empty to keep)"
-                  : meta.id === "anthropic"
-                    ? "sk-ant-api..."
-                    : "Only if your LM Studio server requires one"
+                  : meta.keyPlaceholder
               }
               onChange={(e) => setApiKey(e.target.value)}
             />
-            {meta.id === "anthropic" && (
-              <p className="text-xs text-muted-foreground">
-                Create an API key in the Anthropic Console (console.anthropic.com). Claude
-                Code setup tokens won't work here.
-              </p>
+            {meta.keyHelp && (
+              <p className="text-xs text-muted-foreground">{meta.keyHelp}</p>
             )}
           </div>
 

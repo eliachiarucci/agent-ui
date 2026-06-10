@@ -42,8 +42,9 @@ export default function App() {
 }
 
 function Workspace() {
+  const { data: session } = authClient.useSession()
   const { agents, activeAgentId, selectAgent, create, update, remove: removeAgent } = useAgents()
-  const { conversations, loading, refresh, remove } = useConversations(activeAgentId)
+  const { conversations, loading, refresh, add, remove } = useConversations(activeAgentId)
   // New chats get a client-generated id; the backend creates the row on first message.
   const [activeId, setActiveId] = useState<string>(() => randomUUID())
   // Private/shared choice for the next conversation; fixed server-side at creation.
@@ -75,6 +76,23 @@ function Workspace() {
       () => void refresh()
     )
   }, [activeId, conversations, refresh])
+
+  // Puts a brand-new conversation in the sidebar the moment its first message
+  // is sent (the backend persists the row before streaming, so the id is
+  // already real); existing conversations are deduped by the hook.
+  const handleMessageSent = (text: string) => {
+    if (!activeAgentId || conversations.some((c) => c.id === activeId)) return
+    const now = new Date().toISOString()
+    add({
+      id: activeId,
+      agentId: activeAgentId,
+      userId: session?.user.id ?? "",
+      shared: newChatShared,
+      messages: [{ role: "user", content: text }],
+      createdAt: now,
+      updatedAt: now,
+    })
+  }
 
   const handleSelect = (id: string) => {
     setActiveId(id)
@@ -163,6 +181,7 @@ function Workspace() {
           chat={chat}
           shared={newChatShared}
           onSharedChange={setNewChatShared}
+          onMessageSent={handleMessageSent}
         />
       </main>
 

@@ -9,15 +9,19 @@ type MessageListProps = {
 }
 
 // The stream opens (status becomes "streaming") before the first token arrives,
-// so keep the loader up until the assistant message has something to show.
-function hasVisibleContent(message: UIMessage | undefined): boolean {
+// and the model keeps working between parts (e.g. reading a tool result before
+// responding), so show the loader unless the last part is animating its own
+// progress (streaming text/reasoning, or a tool spinner).
+function isRenderingProgress(message: UIMessage | undefined): boolean {
   if (!message || message.role !== "assistant") return false
-  return message.parts.some(
-    (p) =>
-      (p.type === "text" && p.text.length > 0) ||
-      p.type === "reasoning" ||
-      isToolUIPart(p)
-  )
+  const last = message.parts.at(-1)
+  if (!last) return false
+  if (last.type === "text") return last.text.length > 0 && last.state !== "done"
+  if (last.type === "reasoning") return last.state === "streaming"
+  if (isToolUIPart(last)) {
+    return last.state === "input-streaming" || last.state === "input-available"
+  }
+  return false
 }
 
 export function MessageList({ messages, status, error }: MessageListProps) {
@@ -26,7 +30,7 @@ export function MessageList({ messages, status, error }: MessageListProps) {
 
   const showLoader =
     status === "submitted" ||
-    (status === "streaming" && !hasVisibleContent(messages[messages.length - 1]))
+    (status === "streaming" && !isRenderingProgress(messages[messages.length - 1]))
 
   const handleScroll = () => {
     const el = containerRef.current

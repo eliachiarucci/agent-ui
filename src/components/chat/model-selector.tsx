@@ -16,6 +16,8 @@ import { cn } from "@/lib/utils"
 const PROVIDER_LABELS: Record<ProviderType, string> = {
   lmstudio: "LM Studio",
   anthropic: "Anthropic",
+  google: "Google",
+  deepinfra: "DeepInfra",
 }
 
 // Status-bar model picker: a menu of configured providers; clicking one expands
@@ -47,7 +49,8 @@ export function ModelSelector({ fallbackModel }: { fallbackModel?: string }) {
       provider,
       provider === "lmstudio" ? { url: config.settings.url } : {}
     ).catch(() => ({ models: [] as string[] }))
-    setModelsByProvider((cur) => ({ ...cur, [provider]: models }))
+    const sorted = [...models].sort((a, b) => a.localeCompare(b, undefined, { sensitivity: "base" }))
+    setModelsByProvider((cur) => ({ ...cur, [provider]: sorted }))
   }
 
   return (

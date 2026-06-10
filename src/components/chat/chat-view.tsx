@@ -16,18 +16,26 @@ type ChatViewProps = {
   // message.
   shared: boolean
   onSharedChange: (shared: boolean) => void
+  // Fires as a message is sent, so the app can show a new conversation in the
+  // sidebar immediately instead of waiting for the turn to finish.
+  onMessageSent: (text: string) => void
 }
 
-export function ChatView({ chat, shared, onSharedChange }: ChatViewProps) {
+export function ChatView({ chat, shared, onSharedChange, onMessageSent }: ChatViewProps) {
   const { messages, sendMessage, status, error, stop } = useChat({ chat })
 
   const busy = status === "submitted" || status === "streaming"
   const isNew = messages.length === 0
 
+  const send = (text: string) => {
+    onMessageSent(text)
+    void sendMessage({ text })
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {isNew ? (
-        <EmptyState onSuggestion={(text) => void sendMessage({ text })} />
+        <EmptyState onSuggestion={send} />
       ) : (
         <MessageList messages={messages} status={status} error={error} />
       )}
@@ -53,7 +61,7 @@ export function ChatView({ chat, shared, onSharedChange }: ChatViewProps) {
           </div>
         </div>
       )}
-      <ChatInput busy={busy} onSend={(text) => void sendMessage({ text })} onStop={() => void stop()} />
+      <ChatInput busy={busy} onSend={send} onStop={() => void stop()} />
       <StatusBar messages={messages} />
     </div>
   )

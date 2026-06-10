@@ -28,6 +28,15 @@ export function useConversations(agentId?: string) {
     void refresh()
   }, [refresh])
 
+  // Optimistic insert for a just-started chat: shows it in the sidebar the
+  // moment the first message is sent; the next refresh (onFinish) replaces it
+  // with the real server row, which shares the same client-generated id.
+  const add = useCallback((conversation: Conversation) => {
+    setConversations((prev) =>
+      prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev]
+    )
+  }, [])
+
   const remove = useCallback(async (id: string) => {
     try {
       await deleteConversation(id)
@@ -39,5 +48,5 @@ export function useConversations(agentId?: string) {
     }
   }, [])
 
-  return { conversations, loading, refresh, remove }
+  return { conversations, loading, refresh, add, remove }
 }

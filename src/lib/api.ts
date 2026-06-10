@@ -221,7 +221,7 @@ export function deleteMemory(id: string): Promise<void> {
 
 // ── Model providers ─────────────────────────────────────────────────────────
 
-export type ProviderType = "lmstudio" | "anthropic"
+export type ProviderType = "lmstudio" | "anthropic" | "google" | "deepinfra"
 
 // What the user types into a provider card. apiKey may be omitted on updates:
 // the backend then reuses the stored key.
