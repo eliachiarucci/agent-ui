@@ -6,15 +6,18 @@ import { ChatView } from "@/components/chat/chat-view"
 import { MemoryDialog } from "@/components/memory/memory-dialog"
 import { FilesDialog } from "@/components/files/files-dialog"
 import { NotesDialog } from "@/components/notes/notes-dialog"
+import { NoteEditorDialog } from "@/components/notes/note-editor-dialog"
 import { RecurringJobsDialog } from "@/components/cron/recurring-jobs-dialog"
 import { FileViewer } from "@/components/files/file-viewer"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { LoginPage } from "@/components/auth/login-page"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import { useAgents } from "@/hooks/use-agents"
+import { useNotes } from "@/hooks/use-notes"
 import { useConversations } from "@/hooks/use-conversations"
 import { useIsMobile } from "@/hooks/use-is-mobile"
-import { getConversation, toUIMessages } from "@/lib/api"
+import { getConversation, listNotes, toUIMessages, type Note } from "@/lib/api"
 import { authClient } from "@/lib/auth-client"
 import { discardChat, getChat, setChatOptions } from "@/lib/chat"
 import { chatFileNames, latestPresentedFile } from "@/lib/chat-files"
@@ -85,7 +88,29 @@ function Workspace() {
     setActiveFile(name)
     setViewerOpen(true)
   }, [])
-  const fileViewerActions = useMemo(() => ({ viewFile }), [viewFile])
+
+  // Note opened from a chat tool chip — straight into the editor popup, no
+  // notes list in between. Inactive useNotes only lends us its autosaving
+  // update for the popup.
+  const [chatNote, setChatNote] = useState<Note | null>(null)
+  const { update: updateChatNote } = useNotes(false, activeAgentId)
+  const viewNote = useCallback(
+    (title: string) => {
+      void (async () => {
+        // Tool calls only carry the title; fetch the row (fresh content included).
+        const notes = await listNotes(activeAgentId).catch(() => null)
+        const note = notes?.find((n) => n.title === title)
+        if (!note) {
+          toast.error(notes ? `Note "${title}" no longer exists` : "Failed to load note")
+          return
+        }
+        setChatNote(note)
+      })()
+    },
+    [activeAgentId]
+  )
+
+  const fileViewerActions = useMemo(() => ({ viewFile, viewNote }), [viewFile, viewNote])
 
   // Keep the sidebar in sync when the viewport crosses the mobile breakpoint.
   useEffect(() => {
@@ -307,6 +332,12 @@ function Workspace() {
         }}
       />
       <NotesDialog open={notesOpen} onOpenChange={setNotesOpen} agentId={activeAgentId} />
+      {/* Note editor opened from a chat tool chip's View button. */}
+      <NoteEditorDialog
+        note={chatNote}
+        onOpenChange={(open) => !open && setChatNote(null)}
+        onUpdate={updateChatNote}
+      />
       <RecurringJobsDialog
         open={jobsOpen}
         onOpenChange={setJobsOpen}

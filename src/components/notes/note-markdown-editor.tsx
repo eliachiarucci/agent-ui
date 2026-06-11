@@ -1,3 +1,5 @@
+// Must evaluate before @mdxeditor/editor (see prism-global.ts).
+import "./prism-global"
 import {
   BlockTypeSelect,
   BoldItalicUnderlineToggles,
@@ -38,6 +40,7 @@ type NoteMarkdownEditorProps = {
 // markdown the agent's note tools and the read-mode renderer use.
 export function NoteMarkdownEditor({ value, onChange, autoFocus }: NoteMarkdownEditorProps) {
   const { resolvedTheme } = useTheme()
+  const dark = resolvedTheme === "dark"
 
   return (
     <MDXEditor
@@ -87,7 +90,9 @@ export function NoteMarkdownEditor({ value, onChange, autoFocus }: NoteMarkdownE
         }),
       ]}
       // dark-theme flips MDXEditor's own CSS variables to match the app theme.
-      className={cn("h-full", resolvedTheme === "dark" && "dark-theme")}
+      // The class lands on the editor root AND on the popup container MDXEditor
+      // portals to <body> (toolbar dropdowns, link dialog), so both follow it.
+      className={cn("h-full", dark && "dark-theme")}
       contentEditableClassName={cn("min-h-40 p-4", MARKDOWN_CLASSES)}
     />
   )

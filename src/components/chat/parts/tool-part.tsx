@@ -11,8 +11,11 @@ import {
   FolderOpen,
   Loader2,
   PenLine,
+  NotebookPen,
   ScreenShare,
   Search,
+  StickyNote,
+  Trash2,
   Wrench,
   XCircle,
 } from "lucide-react"
@@ -20,6 +23,7 @@ import type { ToolUIPart, DynamicToolUIPart } from "ai"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { fileToolTarget } from "@/lib/chat-files"
+import { noteToolTarget } from "@/lib/chat-notes"
 import { useFileViewerActions } from "@/lib/file-viewer-context"
 import { cn } from "@/lib/utils"
 
@@ -33,6 +37,11 @@ const TOOL_META: Record<string, { icon: typeof Wrench; running: string; done: st
   readFile: { icon: FileText, running: "Reading a file…", done: "Read a file" },
   listFiles: { icon: FolderOpen, running: "Listing files…", done: "Listed files" },
   presentFile: { icon: ScreenShare, running: "Opening a file…", done: "Opened a file in the viewer" },
+  writeNote: { icon: NotebookPen, running: "Writing a note…", done: "Wrote a note" },
+  editNote: { icon: NotebookPen, running: "Editing a note…", done: "Edited a note" },
+  readNote: { icon: StickyNote, running: "Reading a note…", done: "Read a note" },
+  listNotes: { icon: StickyNote, running: "Listing notes…", done: "Listed notes" },
+  deleteNote: { icon: Trash2, running: "Deleting a note…", done: "Deleted a note" },
 }
 
 function JsonBlock({ label, value }: { label: string; value: unknown }) {
@@ -57,8 +66,10 @@ export function ToolPart({ part, toolName }: { part: ToolUIPart | DynamicToolUIP
 
   const running = part.state === "input-streaming" || part.state === "input-available"
   const failed = part.state === "output-error"
-  // File-tool calls that completed on a real file get a shortcut into the viewer.
+  // File-tool calls that completed on a real file get a shortcut into the
+  // viewer; note-tool calls one into the note editor popup.
   const viewableFile = viewer ? fileToolTarget(part) : null
+  const viewableNote = viewer ? noteToolTarget(part) : null
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -91,6 +102,18 @@ export function ToolPart({ part, toolName }: { part: ToolUIPart | DynamicToolUIP
             className="text-muted-foreground"
             aria-label={`View ${viewableFile}`}
             onClick={() => viewer?.viewFile(viewableFile)}
+          >
+            <Eye className="size-3.5" />
+            View
+          </Button>
+        )}
+        {viewableNote && (
+          <Button
+            variant="ghost"
+            size="xs"
+            className="text-muted-foreground"
+            aria-label={`View note ${viewableNote}`}
+            onClick={() => viewer?.viewNote(viewableNote)}
           >
             <Eye className="size-3.5" />
             View

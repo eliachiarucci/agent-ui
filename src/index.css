@@ -146,3 +146,21 @@
   top: 0;
   z-index: 10;
 }
+
+/* MDXEditor portals toolbar popups (block-type select, link dialog) into this
+   container on <body> with z-index 2; the note editor lives in a Radix dialog
+   at z-50, so without this the popups open invisibly behind the dialog. The
+   doubled class out-specifies MDXEditor's own rule, which loads later (its CSS
+   ships with the lazy editor chunk) and would otherwise win on source order. */
+.mdxeditor-popup-container.mdxeditor-popup-container {
+  z-index: 60;
+}
+
+/* MDXEditor hardcodes --basePageBg: white and its dark-theme class flips the
+   color scales but not this one var — yet it is the background of the toolbar's
+   block-type trigger and of every portalled popup. Map it to the app's popover
+   color so they follow the theme. */
+.mdxeditor.dark-theme,
+.mdxeditor-popup-container.dark-theme {
+  --basePageBg: var(--popover);
+}
