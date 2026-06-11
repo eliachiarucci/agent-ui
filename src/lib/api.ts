@@ -9,6 +9,9 @@ const CONTEXT_URL = "/agent/context"
 const AGENTS_URL = "/agent/agents"
 const PROVIDERS_URL = "/agent/providers"
 const PROVIDER_TEST_URL = "/agent/provider-test"
+const NOTES_URL = "/agent/notes"
+const JOBS_URL = "/agent/jobs"
+const JOB_RUNS_URL = "/agent/jobs/runs"
 
 // The backend attaches per-step token usage to assistant messages (see
 // conversation.ts messageMetadata); the latest one is the current context size.
@@ -128,6 +131,16 @@ export function listConversations(agentId?: string): Promise<Conversation[]> {
     ? `${CONVERSATIONS_URL}?agent_id=${encodeURIComponent(agentId)}`
     : CONVERSATIONS_URL
   return request<Conversation[]>(url)
+}
+
+// Single conversation by id (the backend's list route filters on id). Used to
+// open conversations that aren't in the loaded sidebar list, e.g. ones a
+// recurring job created server-side.
+export async function getConversation(id: string): Promise<Conversation | undefined> {
+  const rows = await request<Conversation[]>(
+    `${CONVERSATIONS_URL}?id=${encodeURIComponent(id)}`
+  )
+  return rows[0]
 }
 
 export function listAgents(): Promise<Agent[]> {
@@ -256,6 +269,194 @@ export function getFileContent(
   return request<FileContent>(
     `${FILES_URL}/content?conversation_id=${encodeURIComponent(file.conversationId)}&name=${encodeURIComponent(file.name)}`
   )
+}
+
+// ── Notes ───────────────────────────────────────────────────────────────────
+
+// A shared note: agent-wide (visible to every member, from every conversation),
+// editable both by the agent's note tools and manually in the Notes view.
+// Titles are unique within an agent.
+export type Note = {
+  id: string
+  agentId: string
+  createdBy: string | null
+  title: string
+  content: string
+  createdAt: string
+  updatedAt: string
+}
+
+export function listNotes(agentId?: string): Promise<Note[]> {
+  const url = agentId ? `${NOTES_URL}?agent_id=${encodeURIComponent(agentId)}` : NOTES_URL
+  return request<Note[]>(url)
+}
+
+export function createNote(input: {
+  title: string
+  content: string
+  agentId?: string
+}): Promise<Note> {
+  return request<Note>(NOTES_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      title: input.title,
+      content: input.content,
+      ...(input.agentId ? { agent_id: input.agentId } : {}),
+    }),
+  })
+}
+
+export function updateNote(
+  id: string,
+  changes: { title?: string; content?: string },
+  agentId?: string
+): Promise<Note> {
+  return request<Note>(NOTES_URL, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, ...changes, ...(agentId ? { agent_id: agentId } : {}) }),
+  })
+}
+
+export function deleteNote(id: string, agentId?: string): Promise<void> {
+  const url = agentId
+    ? `${NOTES_URL}?id=${encodeURIComponent(id)}&agent_id=${encodeURIComponent(agentId)}`
+    : `${NOTES_URL}?id=${encodeURIComponent(id)}`
+  return request<void>(url, { method: "DELETE" })
+}
+
+// ── Recurring jobs ──────────────────────────────────────────────────────────
+
+// "once" jobs (reminders) are deleted after their first successful run.
+export const CRON_RECURRENCES = ["once", "weekly", "biweekly", "monthly"] as const
+export type CronRecurrence = (typeof CRON_RECURRENCES)[number]
+
+export type CronJob = {
+  id: string
+  agentId: string
+  // Joined in by the backend for display.
+  agentName: string
+  userId: string
+  // Display name; null until the runner generates one on the next run.
+  title: string | null
+  prompt: string
+  // 0 = Sunday … 6 = Saturday; at least one.
+  daysOfWeek: number[]
+  // "HH:MM" wall clock in `timezone`.
+  time: string
+  recurrence: CronRecurrence
+  timezone: string
+  // Model the runs use; null → the backend's env-configured default.
+  provider: ProviderType | null
+  model: string | null
+  nextRunAt: string
+  createdAt: string
+}
+
+export type CronJobInput = {
+  agentId: string
+  // Empty/omitted → the agent generates a title on the job's next run.
+  title?: string
+  prompt: string
+  daysOfWeek: number[]
+  time: string
+  recurrence: CronRecurrence
+  provider?: ProviderType
+  model?: string
+}
+
+// PATCH payload: omitted fields keep their value; provider: null returns the
+// job to the backend's default model; title: null lets the agent regenerate.
+export type CronJobUpdate = {
+  title?: string | null
+  prompt?: string
+  daysOfWeek?: number[]
+  time?: string
+  recurrence?: CronRecurrence
+  provider?: ProviderType | null
+  model?: string | null
+}
+
+// A finished run; carries its job's prompt and agent name so the history list
+// reads on its own. conversationId points at the conversation holding the
+// run's output (null if the run failed before creating one, or it was deleted).
+export type CronJobRun = {
+  id: string
+  // Null once the job is gone (deleted by the user, or a completed "once" job).
+  jobId: string | null
+  conversationId: string | null
+  status: "success" | "error"
+  error: string | null
+  startedAt: string
+  finishedAt: string
+  // Job title at run time; display falls back to the prompt when null.
+  title: string | null
+  prompt: string
+  agentId: string
+  agentName: string
+}
+
+export function listCronJobs(): Promise<CronJob[]> {
+  return request<CronJob[]>(JOBS_URL)
+}
+
+export function createCronJob(input: CronJobInput): Promise<CronJob> {
+  return request<CronJob>(JOBS_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      agent_id: input.agentId,
+      ...(input.title ? { title: input.title } : {}),
+      prompt: input.prompt,
+      days_of_week: input.daysOfWeek,
+      time: input.time,
+      recurrence: input.recurrence,
+      // The schedule is wall-clock in the creator's timezone; the backend
+      // computes the absolute run instants from it.
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      ...(input.provider ? { provider: input.provider, model: input.model } : {}),
+    }),
+  })
+}
+
+// Fire-and-forget: the backend answers 202 and the run lands in the history
+// when it finishes (poll listCronRuns).
+export function triggerCronJob(id: string): Promise<{ started: boolean }> {
+  return request<{ started: boolean }>(`${JOBS_URL}/trigger`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+  })
+}
+
+// Schedule changes (daysOfWeek/time/recurrence) reschedule the job from now,
+// in the editor's current timezone.
+export function updateCronJob(id: string, input: CronJobUpdate): Promise<CronJob> {
+  const reschedules =
+    input.daysOfWeek !== undefined || input.time !== undefined || input.recurrence !== undefined
+  return request<CronJob>(JOBS_URL, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      id,
+      ...(input.title !== undefined && { title: input.title }),
+      ...(input.prompt !== undefined && { prompt: input.prompt }),
+      ...(input.daysOfWeek !== undefined && { days_of_week: input.daysOfWeek }),
+      ...(input.time !== undefined && { time: input.time }),
+      ...(input.recurrence !== undefined && { recurrence: input.recurrence }),
+      ...(reschedules && { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+      ...(input.provider !== undefined && { provider: input.provider, model: input.model ?? null }),
+    }),
+  })
+}
+
+export function deleteCronJob(id: string): Promise<void> {
+  return request<void>(`${JOBS_URL}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+export function listCronRuns(): Promise<CronJobRun[]> {
+  return request<CronJobRun[]>(JOB_RUNS_URL)
 }
 
 // ── Model providers ─────────────────────────────────────────────────────────

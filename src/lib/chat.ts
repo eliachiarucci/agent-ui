@@ -34,6 +34,8 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
         ...(options?.agentId ? { agent_id: options.agentId } : {}),
         ...(options?.shared !== undefined ? { shared: options.shared } : {}),
         ...(active ? { provider: active.provider, model: active.model } : {}),
+        // The backend's scheduling tools interpret times in the sender's timezone.
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       },
     }
   },
@@ -44,14 +46,27 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
 // user is on another chat and is intact (live or finished) when they return.
 const chats = new Map<string, Chat<AgentUIMessage>>()
 
+// onFinish callbacks live outside the Chat instances and are refreshed on
+// every getChat call: a Chat only stores the callback passed at creation, and
+// the one from the creating render can close over not-yet-loaded state (e.g.
+// an unvalidated active-agent id before the agent list resolves), which made
+// the post-turn sidebar refresh query the wrong agent and wipe the list.
+const finishCallbacks = new Map<string, () => void>()
+
 export function getChat(
   id: string,
   initialMessages: AgentUIMessage[],
   onFinish: () => void
 ): Chat<AgentUIMessage> {
+  finishCallbacks.set(id, onFinish)
   let chat = chats.get(id)
   if (!chat) {
-    chat = new Chat<AgentUIMessage>({ id, messages: initialMessages, transport, onFinish })
+    chat = new Chat<AgentUIMessage>({
+      id,
+      messages: initialMessages,
+      transport,
+      onFinish: () => finishCallbacks.get(id)?.(),
+    })
     chats.set(id, chat)
   }
   return chat
@@ -60,4 +75,5 @@ export function getChat(
 export function discardChat(id: string): void {
   chats.delete(id)
   sendOptions.delete(id)
+  finishCallbacks.delete(id)
 }

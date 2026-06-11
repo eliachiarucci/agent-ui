@@ -26,13 +26,14 @@ function extensionOf(name: string): string {
 }
 
 // Same typography as chat markdown (text-part.tsx), sized up a touch for a
-// document pane.
-const MARKDOWN_CLASSES =
+// document pane. Shared with the notes viewer.
+export const MARKDOWN_CLASSES =
   "space-y-3 text-sm leading-relaxed [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.85em] [&_h1]:text-xl [&_h1]:font-semibold [&_h2]:text-lg [&_h2]:font-semibold [&_h3]:font-semibold [&_li]:my-0.5 [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_table]:w-full [&_table]:border-collapse [&_td]:border [&_td]:px-2 [&_td]:py-1 [&_th]:border [&_th]:bg-muted [&_th]:px-2 [&_th]:py-1 [&_ul]:list-disc [&_ul]:pl-5"
 
 // One file's live content; remounted (keyed) per file so polling and scroll
-// state start fresh when the tab changes.
-function FileContentPane({ conversationId, name }: { conversationId: string; name: string }) {
+// state start fresh when the tab changes. Also used by the files dialog's
+// preview popup.
+export function FileContentPane({ conversationId, name }: { conversationId: string; name: string }) {
   const { file, error, loading } = useFileContent(conversationId, name)
   const extension = extensionOf(name)
   const isHtml = extension === "html" || extension === "htm"

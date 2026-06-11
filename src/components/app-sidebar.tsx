@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Brain, FolderOpen, MessageSquare, PanelLeftClose, Plus, Settings, Trash2, Users } from "lucide-react"
+import { Brain, CalendarClock, FolderOpen, MessageSquare, PanelLeftClose, Plus, Settings, StickyNote, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
@@ -34,6 +34,8 @@ type AppSidebarProps = {
   onDelete: (id: string) => void
   onOpenMemories: () => void
   onOpenFiles: () => void
+  onOpenNotes: () => void
+  onOpenJobs: () => void
   onOpenSettings: () => void
 }
 
@@ -52,6 +54,8 @@ export function AppSidebar({
   onDelete,
   onOpenMemories,
   onOpenFiles,
+  onOpenNotes,
+  onOpenJobs,
   onOpenSettings,
 }: AppSidebarProps) {
   const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null)
@@ -148,23 +152,35 @@ export function AppSidebar({
       </div>
 
       <Separator />
-      <div className="flex items-center gap-2 p-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Open settings"
-          onClick={onOpenSettings}
-        >
-          <Settings className="size-4" />
-        </Button>
-        <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenMemories}>
-          <Brain className="size-4" />
-          Memories
-        </Button>
-        <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenFiles}>
-          <FolderOpen className="size-4" />
-          Files
-        </Button>
+      <div className="flex flex-col gap-2 p-3">
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenJobs}>
+            <CalendarClock className="size-4" />
+            Jobs
+          </Button>
+          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenNotes}>
+            <StickyNote className="size-4" />
+            Notes
+          </Button>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Open settings"
+            onClick={onOpenSettings}
+          >
+            <Settings className="size-4" />
+          </Button>
+          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenMemories}>
+            <Brain className="size-4" />
+            Memories
+          </Button>
+          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenFiles}>
+            <FolderOpen className="size-4" />
+            Files
+          </Button>
+        </div>
       </div>
 
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>

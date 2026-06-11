@@ -16,10 +16,16 @@ export function useAgents() {
       .then((list) => {
         if (cancelled) return
         setAgents(list)
-        // Drop a stale stored selection (deleted agent) and default to the first agent.
-        setActiveAgentId((current) =>
-          current && list.some((a) => a.id === current) ? current : list[0]?.id
-        )
+        // Drop a stale stored selection (deleted agent) and default to the
+        // first agent — persisting the correction, so the stale id can't keep
+        // reseeding the first render on every page load.
+        setActiveAgentId((current) => {
+          if (current && list.some((a) => a.id === current)) return current
+          const fallback = list[0]?.id
+          if (fallback) localStorage.setItem(ACTIVE_AGENT_KEY, fallback)
+          else localStorage.removeItem(ACTIVE_AGENT_KEY)
+          return fallback
+        })
       })
       .catch((error: unknown) => {
         if (!cancelled)

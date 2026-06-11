@@ -5,6 +5,8 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { ChatView } from "@/components/chat/chat-view"
 import { MemoryDialog } from "@/components/memory/memory-dialog"
 import { FilesDialog } from "@/components/files/files-dialog"
+import { NotesDialog } from "@/components/notes/notes-dialog"
+import { RecurringJobsDialog } from "@/components/cron/recurring-jobs-dialog"
 import { FileViewer } from "@/components/files/file-viewer"
 import { SettingsDialog } from "@/components/settings-dialog"
 import { LoginPage } from "@/components/auth/login-page"
@@ -12,7 +14,7 @@ import { Button } from "@/components/ui/button"
 import { useAgents } from "@/hooks/use-agents"
 import { useConversations } from "@/hooks/use-conversations"
 import { useIsMobile } from "@/hooks/use-is-mobile"
-import { toUIMessages } from "@/lib/api"
+import { getConversation, toUIMessages } from "@/lib/api"
 import { authClient } from "@/lib/auth-client"
 import { discardChat, getChat, setChatOptions } from "@/lib/chat"
 import { chatFileNames, latestPresentedFile } from "@/lib/chat-files"
@@ -56,6 +58,8 @@ function Workspace() {
   const [newChatShared, setNewChatShared] = useState(false)
   const [memoriesOpen, setMemoriesOpen] = useState(false)
   const [filesOpen, setFilesOpen] = useState(false)
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [jobsOpen, setJobsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
@@ -185,6 +189,20 @@ function Workspace() {
     return deleted
   }
 
+  // Conversations created by recurring jobs are written server-side, so they
+  // are usually not in the loaded sidebar list yet. Fetch the row and seed it
+  // into the list *before* selecting: the Chat instance is cached on first
+  // build (lib/chat.ts), so its messages must be there when activeId flips.
+  const openJobConversation = async (id: string, agentId: string) => {
+    setJobsOpen(false)
+    const conversation = await getConversation(id)
+    if (!conversation) return
+    if (agentId !== activeAgentId) selectAgent(agentId)
+    discardChat(id)
+    add(conversation)
+    handleSelect(id)
+  }
+
   const handleDelete = (id: string) => {
     void remove(id)
     discardChat(id)
@@ -219,6 +237,8 @@ function Workspace() {
         onDelete={handleDelete}
         onOpenMemories={() => setMemoriesOpen(true)}
         onOpenFiles={() => setFilesOpen(true)}
+        onOpenNotes={() => setNotesOpen(true)}
+        onOpenJobs={() => setJobsOpen(true)}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
@@ -277,7 +297,23 @@ function Workspace() {
       )}
 
       <MemoryDialog open={memoriesOpen} onOpenChange={setMemoriesOpen} />
-      <FilesDialog open={filesOpen} onOpenChange={setFilesOpen} agentId={activeAgentId} />
+      <FilesDialog
+        open={filesOpen}
+        onOpenChange={setFilesOpen}
+        agentId={activeAgentId}
+        onOpenConversation={(id) => {
+          setFilesOpen(false)
+          handleSelect(id)
+        }}
+      />
+      <NotesDialog open={notesOpen} onOpenChange={setNotesOpen} agentId={activeAgentId} />
+      <RecurringJobsDialog
+        open={jobsOpen}
+        onOpenChange={setJobsOpen}
+        agents={agents}
+        activeAgentId={activeAgentId}
+        onOpenConversation={(id, agentId) => void openJobConversation(id, agentId)}
+      />
       <SettingsDialog
         open={settingsOpen}
         onOpenChange={setSettingsOpen}
