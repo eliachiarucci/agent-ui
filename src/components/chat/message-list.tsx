@@ -6,6 +6,8 @@ type MessageListProps = {
   messages: UIMessage[]
   status: ChatStatus
   error: Error | undefined
+  // Conversation id, so message attachments can link to their stored file.
+  conversationId: string
 }
 
 // The stream opens (status becomes "streaming") before the first token arrives,
@@ -24,7 +26,7 @@ function isRenderingProgress(message: UIMessage | undefined): boolean {
   return false
 }
 
-export function MessageList({ messages, status, error }: MessageListProps) {
+export function MessageList({ messages, status, error, conversationId }: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
 
@@ -49,7 +51,7 @@ export function MessageList({ messages, status, error }: MessageListProps) {
     <div ref={containerRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6">
         {messages.map((message) => (
-          <Message key={message.id} message={message} />
+          <Message key={message.id} message={message} conversationId={conversationId} />
         ))}
 
         {showLoader && (

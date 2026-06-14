@@ -1,12 +1,13 @@
 import { useChat, type Chat } from "@ai-sdk/react"
 import { Lock, Users } from "lucide-react"
+import { toast } from "sonner"
 import { MessageList } from "@/components/chat/message-list"
-import { ChatInput } from "@/components/chat/chat-input"
+import { ChatInput, type PendingAttachment } from "@/components/chat/chat-input"
 import { StatusBar } from "@/components/chat/status-bar"
 import { EmptyState } from "@/components/chat/empty-state"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import type { AgentUIMessage } from "@/lib/api"
+import { formatAttachmentsMarker, uploadFile, type AgentUIMessage } from "@/lib/api"
 
 type ChatViewProps = {
   // Owned and cached by App so the stream survives switching conversations.
@@ -27,9 +28,41 @@ export function ChatView({ chat, shared, onSharedChange, onMessageSent }: ChatVi
   const busy = status === "submitted" || status === "streaming"
   const isNew = messages.length === 0
 
-  const send = (text: string) => {
-    onMessageSent(text)
-    void sendMessage({ text })
+  // Attachments are uploaded to the conversation's workspace first, then the
+  // message carries an <attached-files> marker (rendered as chips, read by the
+  // agent via readFile). Upload failure aborts the send so the composer can
+  // keep the chips for a retry.
+  const send = async (text: string, attachments: PendingAttachment[] = []) => {
+    try {
+      await Promise.all(
+        attachments.map((a) =>
+          uploadFile({
+            conversationId: chat.id,
+            name: a.name,
+            content: a.content,
+            contentType: "text/plain;charset=utf-8",
+          })
+        )
+      )
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to attach file")
+      throw e
+    }
+    onMessageSent(text || attachments[0]?.label || "Attachment")
+    const parts: AgentUIMessage["parts"] = [
+      ...(text ? [{ type: "text" as const, text }] : []),
+      ...(attachments.length > 0
+        ? [
+            {
+              type: "text" as const,
+              text: formatAttachmentsMarker(
+                attachments.map((a) => ({ name: a.name, label: a.label }))
+              ),
+            },
+          ]
+        : []),
+    ]
+    void sendMessage({ parts })
   }
 
   return (
@@ -37,7 +70,12 @@ export function ChatView({ chat, shared, onSharedChange, onMessageSent }: ChatVi
       {isNew ? (
         <EmptyState onSuggestion={send} />
       ) : (
-        <MessageList messages={messages} status={status} error={error} />
+        <MessageList
+          messages={messages}
+          status={status}
+          error={error}
+          conversationId={chat.id}
+        />
       )}
       {isNew && (
         <div className="px-4 pb-2">

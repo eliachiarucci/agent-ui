@@ -75,13 +75,56 @@ export type Memory = {
   lastAccessedAt: string
 }
 
+// Prefix of the machine-inserted text part that lists files the user attached
+// to a message. The backend's matching constant is ATTACHED_FILES_MARKER in
+// agent/lib/agent/files.ts — keep the two literals in sync.
+export const ATTACHMENTS_MARKER = "<attached-files>"
+
+// A file attached to a message (e.g. long pasted content uploaded as a file):
+// `name` is the stored file name, `label` is the chip text shown to the user.
+export type Attachment = { name: string; label: string }
+
+export function formatAttachmentsMarker(attachments: Attachment[]): string {
+  return ATTACHMENTS_MARKER + JSON.stringify(attachments)
+}
+
+function parseAttachmentsMarker(text: string): Attachment[] | null {
+  if (!text.startsWith(ATTACHMENTS_MARKER)) return null
+  try {
+    const data = JSON.parse(text.slice(ATTACHMENTS_MARKER.length)) as unknown
+    if (!Array.isArray(data)) return null
+    return data.filter(
+      (a): a is Attachment =>
+        !!a && typeof a.name === "string" && typeof a.label === "string"
+    )
+  } catch {
+    return null
+  }
+}
+
+// Attachments carried by a message, read from its <attached-files> text part.
+export function attachmentsFromParts(parts: UIMessage["parts"]): Attachment[] {
+  for (const part of parts) {
+    if (part.type === "text") {
+      const parsed = parseAttachmentsMarker(part.text)
+      if (parsed) return parsed
+    }
+  }
+  return []
+}
+
 // The server prepends a machine-inserted <relevant-memories> text part to user
-// messages (see agent/docs/memory.md); it is model context, not user input, and
-// must be excluded anywhere user text is displayed or echoed back to the server.
+// messages (see agent/docs/memory.md), and attached files ride along as an
+// <attached-files> part; both are model context, not user input, and must be
+// excluded anywhere user text is displayed or echoed back to the server.
 export function isVisibleTextPart(
   part: UIMessage["parts"][number]
 ): part is Extract<UIMessage["parts"][number], { type: "text" }> {
-  return part.type === "text" && !part.text.startsWith("<relevant-memories>")
+  return (
+    part.type === "text" &&
+    !part.text.startsWith("<relevant-memories>") &&
+    !part.text.startsWith(ATTACHMENTS_MARKER)
+  )
 }
 
 export function toUIMessages(stored: StoredMessage[]): AgentUIMessage[] {
@@ -248,6 +291,27 @@ export type StoredFile = {
 export function listFiles(agentId?: string): Promise<StoredFile[]> {
   const url = agentId ? `${FILES_URL}?agent_id=${encodeURIComponent(agentId)}` : FILES_URL
   return request<StoredFile[]>(url)
+}
+
+// Uploads raw file bytes into a conversation's workspace. The body is the file
+// content verbatim (default content type keeps the backend's express.json() from
+// touching the stream); name and conversation ride in the query string. Used for
+// pasted-content attachments today; documents and images will reuse it.
+export function uploadFile(params: {
+  conversationId: string
+  name: string
+  content: Blob | string
+  contentType?: string
+}): Promise<StoredFile> {
+  const { conversationId, name, content, contentType } = params
+  return request<StoredFile>(
+    `${FILES_URL}?conversation_id=${encodeURIComponent(conversationId)}&name=${encodeURIComponent(name)}`,
+    {
+      method: "POST",
+      headers: { "content-type": contentType ?? "application/octet-stream" },
+      body: content,
+    }
+  )
 }
 
 // Plain href, no fetch: the browser handles the attachment download itself.

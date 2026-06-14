@@ -1,7 +1,7 @@
 import { Chat } from "@ai-sdk/react"
 import { DefaultChatTransport } from "ai"
 import { getActiveModel } from "@/lib/active-model"
-import { isVisibleTextPart, type AgentUIMessage } from "@/lib/api"
+import { attachmentsFromParts, isVisibleTextPart, type AgentUIMessage } from "@/lib/api"
 
 // Per-chat send options, set by the UI before the first message goes out. The
 // backend only honors agent_id/shared when it creates the conversation row, so
@@ -24,6 +24,9 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
         .filter(isVisibleTextPart)
         .map((p) => p.text)
         .join("\n") ?? ""
+    // Files attached to this turn were already uploaded to the conversation; the
+    // backend re-stores the marker and the agent reads them with readFile.
+    const attachments = last ? attachmentsFromParts(last.parts) : []
     const options = sendOptions.get(id)
     // Read at send time so mid-conversation model switches apply to the next turn.
     const active = getActiveModel()
@@ -31,6 +34,7 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
       body: {
         message: text,
         conversation_id: id,
+        ...(attachments.length > 0 ? { attachments } : {}),
         ...(options?.agentId ? { agent_id: options.agentId } : {}),
         ...(options?.shared !== undefined ? { shared: options.shared } : {}),
         ...(active ? { provider: active.provider, model: active.model } : {}),
