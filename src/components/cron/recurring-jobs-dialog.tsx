@@ -7,10 +7,12 @@ import {
   ChevronDown,
   ChevronsUpDown,
   Loader2,
+  Pause,
   Play,
   Plus,
   Trash2,
   XCircle,
+  Zap,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -120,6 +122,17 @@ export function RecurringJobsDialog({
     setEditing(null)
   }
 
+  const togglePause = async (job: CronJob) => {
+    try {
+      await update(job.id, { paused: !job.paused })
+      toast.success(job.paused ? "Job resumed" : "Job paused")
+    } catch (error) {
+      toast.error("Failed to update job", {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    }
+  }
+
   const submit = async (values: JobFormValues) => {
     try {
       if (editing) {
@@ -201,6 +214,7 @@ export function RecurringJobsDialog({
                             setView("form")
                           }}
                           onTrigger={() => void trigger(job)}
+                          onTogglePause={() => void togglePause(job)}
                           onDelete={() => void remove(job.id)}
                         />
                       ))}
@@ -285,30 +299,45 @@ function JobCard({
   running,
   onEdit,
   onTrigger,
+  onTogglePause,
   onDelete,
 }: {
   job: CronJob
   running: boolean
   onEdit: () => void
   onTrigger: () => void
+  onTogglePause: () => void
   onDelete: () => void
 }) {
+  const { paused } = job
   return (
-    <div className="group flex items-center gap-3 rounded-md border px-3 py-2">
+    <div className={cn("group flex items-center gap-3 rounded-md border px-3 py-2", paused && "bg-muted/30")}>
       <button
         type="button"
         className="min-w-0 flex-1 text-left"
         aria-label={`Edit job "${job.title ?? job.prompt}"`}
         onClick={onEdit}
       >
-        <p className="truncate text-sm font-medium">{job.title ?? job.prompt}</p>
+        <div className="flex items-center gap-2">
+          <p className={cn("truncate text-sm font-medium", paused && "text-muted-foreground")}>
+            {job.title ?? job.prompt}
+          </p>
+          <StatusBadge paused={paused} />
+        </div>
         {job.title && <p className="truncate text-xs text-muted-foreground">{job.prompt}</p>}
         <p className="text-xs text-muted-foreground">
-          {job.agentName} · {scheduleSummary(job)} · next{" "}
-          {new Date(job.nextRunAt).toLocaleString([], {
-            dateStyle: "medium",
-            timeStyle: "short",
-          })}
+          {job.agentName} · {scheduleSummary(job)} ·{" "}
+          {paused ? (
+            "paused"
+          ) : (
+            <>
+              next{" "}
+              {new Date(job.nextRunAt).toLocaleString([], {
+                dateStyle: "medium",
+                timeStyle: "short",
+              })}
+            </>
+          )}
           {job.provider && job.model && (
             <>
               {" · "}
@@ -320,13 +349,23 @@ function JobCard({
       <Button
         variant="ghost"
         size="icon"
+        aria-label={paused ? `Resume job "${job.prompt}"` : `Pause job "${job.prompt}"`}
+        title={paused ? "Resume" : "Pause"}
+        className="shrink-0 opacity-60 hover:opacity-100"
+        onClick={onTogglePause}
+      >
+        {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
         aria-label={running ? "Run in progress" : `Run "${job.prompt}" now`}
         title="Run now"
         className="shrink-0 opacity-60 hover:opacity-100"
         disabled={running}
         onClick={onTrigger}
       >
-        {running ? <Loader2 className="size-4 animate-spin" /> : <Play className="size-4" />}
+        {running ? <Loader2 className="size-4 animate-spin" /> : <Zap className="size-4" />}
       </Button>
       <Button
         variant="ghost"
@@ -338,6 +377,23 @@ function JobCard({
         <Trash2 className="size-4" />
       </Button>
     </div>
+  )
+}
+
+// Activity status: a colored dot + label so a job's active/paused state is
+// readable at a glance next to its title.
+function StatusBadge({ paused }: { paused: boolean }) {
+  return (
+    <Badge
+      variant="outline"
+      className="shrink-0 gap-1 px-1.5 py-0 text-[10px] font-normal text-muted-foreground"
+    >
+      <span
+        aria-hidden
+        className={cn("size-1.5 rounded-full", paused ? "bg-muted-foreground/50" : "bg-emerald-500")}
+      />
+      {paused ? "Paused" : "Active"}
+    </Badge>
   )
 }
 

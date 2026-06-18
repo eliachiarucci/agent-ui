@@ -11,6 +11,7 @@ const PROVIDERS_URL = "/agent/providers"
 const PROVIDER_TEST_URL = "/agent/provider-test"
 const SETTINGS_URL = "/agent/settings"
 const NOTES_URL = "/agent/notes"
+const MEMORY_CONVERSATIONS_URL = "/agent/memory-conversations"
 const JOBS_URL = "/agent/jobs"
 const JOB_RUNS_URL = "/agent/jobs/runs"
 
@@ -427,6 +428,9 @@ export type CronJob = {
   // Model the runs use; null → the backend's env-configured default.
   provider: ProviderType | null
   model: string | null
+  // Paused jobs stay in the list but the scheduler skips them; manual triggers
+  // still run. Resuming recomputes nextRunAt so no missed slot fires a backlog.
+  paused: boolean
   nextRunAt: string
   createdAt: string
 }
@@ -451,6 +455,8 @@ export type CronJobUpdate = {
   daysOfWeek?: number[]
   time?: string
   recurrence?: CronRecurrence
+  // Pause/resume. Resuming recomputes nextRunAt server-side from now.
+  paused?: boolean
   provider?: ProviderType | null
   model?: string | null
 }
@@ -522,6 +528,7 @@ export function updateCronJob(id: string, input: CronJobUpdate): Promise<CronJob
       ...(input.daysOfWeek !== undefined && { days_of_week: input.daysOfWeek }),
       ...(input.time !== undefined && { time: input.time }),
       ...(input.recurrence !== undefined && { recurrence: input.recurrence }),
+      ...(input.paused !== undefined && { paused: input.paused }),
       ...(reschedules && { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       ...(input.provider !== undefined && { provider: input.provider, model: input.model ?? null }),
     }),
@@ -591,6 +598,43 @@ export function deleteProvider(provider: ProviderType): Promise<void> {
   return request<void>(`${PROVIDERS_URL}?provider=${encodeURIComponent(provider)}`, {
     method: "DELETE",
   })
+}
+
+// Read-only view of what the background memory extractor did per source
+// conversation (lib/agent/memory-extraction.ts). Summaries for the list view…
+export type MemoryConversationSummary = {
+  id: string
+  conversationId: string
+  createdAt: string
+  updatedAt: string
+  exchangeCount: number
+  preview: string
+}
+
+// …and flattened messages for the detail view.
+export type MemoryConversationMessage = {
+  role: "user" | "assistant" | "tool"
+  text?: string
+  toolCalls?: { toolName: string; input: unknown }[]
+  toolResults?: { toolName: string; output: unknown }[]
+}
+
+export type MemoryConversationDetail = {
+  id: string
+  conversationId: string
+  createdAt: string
+  updatedAt: string
+  messages: MemoryConversationMessage[]
+}
+
+export function listMemoryConversations(): Promise<MemoryConversationSummary[]> {
+  return request<MemoryConversationSummary[]>(MEMORY_CONVERSATIONS_URL)
+}
+
+export function getMemoryConversation(id: string): Promise<MemoryConversationDetail> {
+  return request<MemoryConversationDetail>(
+    `${MEMORY_CONVERSATIONS_URL}?id=${encodeURIComponent(id)}`
+  )
 }
 
 // The user's default model: used for chats with no explicit selection, and as
