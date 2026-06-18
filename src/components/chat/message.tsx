@@ -10,9 +10,15 @@ import { attachmentsFromParts, fileDownloadUrl, isVisibleTextPart } from "@/lib/
 export function Message({
   message,
   conversationId,
+  active = false,
 }: {
   message: UIMessage
   conversationId: string
+  // True only for the last message while the chat is still streaming. Gates the
+  // reasoning spinner so an aborted (stopped) turn — whose reasoning part stays
+  // stuck in `state: "streaming"` because it was never finalized — doesn't keep
+  // spinning.
+  active?: boolean
 }) {
   const isUser = message.role === "user"
 
@@ -56,7 +62,9 @@ export function Message({
           return <TextPart key={i} text={part.text} />
         }
         if (part.type === "reasoning") {
-          return <ReasoningPart key={i} text={part.text} streaming={part.state === "streaming"} />
+          return (
+            <ReasoningPart key={i} text={part.text} streaming={active && part.state === "streaming"} />
+          )
         }
         if (isToolUIPart(part)) {
           return <ToolPart key={i} part={part} toolName={getToolName(part)} />

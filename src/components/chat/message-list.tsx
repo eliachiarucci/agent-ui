@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react"
 import { isToolUIPart, type ChatStatus, type UIMessage } from "ai"
+import { Loader2 } from "lucide-react"
 import { Message } from "@/components/chat/message"
 
 type MessageListProps = {
@@ -8,6 +9,12 @@ type MessageListProps = {
   error: Error | undefined
   // Conversation id, so message attachments can link to their stored file.
   conversationId: string
+  // Id of the last message folded into the auto-compaction summary. Older
+  // messages stay fully readable; a marker shows where the summary ends.
+  summarizedThroughId?: string
+  // True while the backend is summarizing this conversation in-band (shown as a
+  // labeled indicator in place of the generic loader).
+  compacting?: boolean
 }
 
 // The stream opens (status becomes "streaming") before the first token arrives,
@@ -26,9 +33,25 @@ function isRenderingProgress(message: UIMessage | undefined): boolean {
   return false
 }
 
-export function MessageList({ messages, status, error, conversationId }: MessageListProps) {
+export function MessageList({
+  messages,
+  status,
+  error,
+  conversationId,
+  summarizedThroughId,
+  compacting,
+}: MessageListProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
+
+  // Only show the marker if the summarized message is actually in this view
+  // (it won't be in a brand-new chat object before the conversation loads).
+  const showSummaryAfter =
+    summarizedThroughId && messages.some((m) => m.id === summarizedThroughId)
+      ? summarizedThroughId
+      : undefined
+
+  const chatActive = status === "submitted" || status === "streaming"
 
   const showLoader =
     status === "submitted" ||
@@ -50,16 +73,36 @@ export function MessageList({ messages, status, error, conversationId }: Message
   return (
     <div ref={containerRef} onScroll={handleScroll} className="min-h-0 flex-1 overflow-y-auto">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 px-4 py-6">
-        {messages.map((message) => (
-          <Message key={message.id} message={message} conversationId={conversationId} />
+        {messages.map((message, index) => (
+          <div key={message.id} className="flex flex-col gap-5">
+            <Message
+              message={message}
+              conversationId={conversationId}
+              active={chatActive && index === messages.length - 1}
+            />
+            {message.id === showSummaryAfter && (
+              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                <div className="h-px flex-1 bg-border" />
+                <span className="shrink-0">Earlier messages summarized for context</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            )}
+          </div>
         ))}
 
-        {showLoader && (
-          <div className="flex items-center gap-1.5 px-1">
-            <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:0ms]" />
-            <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:150ms]" />
-            <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:300ms]" />
+        {compacting ? (
+          <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+            <Loader2 className="size-3.5 animate-spin" />
+            <span>Compacting earlier messages…</span>
           </div>
+        ) : (
+          showLoader && (
+            <div className="flex items-center gap-1.5 px-1">
+              <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:0ms]" />
+              <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:150ms]" />
+              <span className="size-2 animate-bounce rounded-full bg-muted-foreground/60 [animation-delay:300ms]" />
+            </div>
+          )
         )}
 
         {status === "error" && (

@@ -135,6 +135,11 @@ function Workspace() {
     )
   }, [activeId, conversations, refresh])
 
+  // Where the auto-compaction summary ends, if the conversation was compacted:
+  // the message list marks everything up to here as "summarized for context".
+  const summarizedThroughId = conversations.find((c) => c.id === activeId)?.compaction
+    ?.throughMessageId
+
   // Second subscriber to the same Chat instance as ChatView: the workspace
   // derives the file-viewer state (tabs, presentFile auto-open) from the
   // live message stream.
@@ -299,6 +304,7 @@ function Workspace() {
             shared={newChatShared}
             onSharedChange={setNewChatShared}
             onMessageSent={handleMessageSent}
+            summarizedThroughId={summarizedThroughId}
           />
         </FileViewerContext.Provider>
       </main>

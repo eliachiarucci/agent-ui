@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react"
 import { useChat, type Chat } from "@ai-sdk/react"
 import { Lock, Users } from "lucide-react"
 import { toast } from "sonner"
@@ -7,6 +8,7 @@ import { StatusBar } from "@/components/chat/status-bar"
 import { EmptyState } from "@/components/chat/empty-state"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
+import { setChatDataCallback } from "@/lib/chat"
 import { formatAttachmentsMarker, uploadFile, type AgentUIMessage } from "@/lib/api"
 
 type ChatViewProps = {
@@ -20,10 +22,37 @@ type ChatViewProps = {
   // Fires as a message is sent, so the app can show a new conversation in the
   // sidebar immediately instead of waiting for the turn to finish.
   onMessageSent: (text: string) => void
+  // Id of the last message folded into the auto-compaction summary, if any.
+  summarizedThroughId?: string
 }
 
-export function ChatView({ chat, shared, onSharedChange, onMessageSent }: ChatViewProps) {
+export function ChatView({
+  chat,
+  shared,
+  onSharedChange,
+  onMessageSent,
+  summarizedThroughId,
+}: ChatViewProps) {
   const { messages, sendMessage, status, error, stop } = useChat({ chat })
+
+  // The backend compacts long conversations in-band: after the answer streams,
+  // it holds the stream open while it summarizes, emitting `data-compaction`
+  // status. The stream staying open keeps `status === "streaming"` (composer
+  // blocked); this just surfaces a labeled indicator while it runs.
+  const [compacting, setCompacting] = useState(false)
+  useEffect(() => {
+    setChatDataCallback(chat.id, (part) => {
+      if (part.type === "data-compaction") {
+        setCompacting((part.data as { status?: string } | undefined)?.status === "running")
+      }
+    })
+    return () => setChatDataCallback(chat.id, undefined)
+  }, [chat.id])
+  // A finished/idle stream can never still be compacting (guards a missed
+  // "done", e.g. a dropped connection).
+  useEffect(() => {
+    if (status !== "streaming") setCompacting(false)
+  }, [status])
 
   const busy = status === "submitted" || status === "streaming"
   const isNew = messages.length === 0
@@ -75,6 +104,8 @@ export function ChatView({ chat, shared, onSharedChange, onMessageSent }: ChatVi
           status={status}
           error={error}
           conversationId={chat.id}
+          summarizedThroughId={summarizedThroughId}
+          compacting={compacting}
         />
       )}
       {isNew && (

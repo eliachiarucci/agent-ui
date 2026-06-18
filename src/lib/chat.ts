@@ -57,6 +57,18 @@ const chats = new Map<string, Chat<AgentUIMessage>>()
 // the post-turn sidebar refresh query the wrong agent and wipe the list.
 const finishCallbacks = new Map<string, () => void>()
 
+// Same indirection for the stream's transient data parts: the backend emits
+// `data-compaction` status while it summarizes a long conversation in-band
+// (after the answer, before the stream closes). The active ChatView registers a
+// handler; keyed by id so a background chat's parts never drive another's UI.
+type DataPart = { type: string; data?: unknown }
+const dataCallbacks = new Map<string, (part: DataPart) => void>()
+
+export function setChatDataCallback(id: string, cb: ((part: DataPart) => void) | undefined): void {
+  if (cb) dataCallbacks.set(id, cb)
+  else dataCallbacks.delete(id)
+}
+
 export function getChat(
   id: string,
   initialMessages: AgentUIMessage[],
@@ -70,6 +82,7 @@ export function getChat(
       messages: initialMessages,
       transport,
       onFinish: () => finishCallbacks.get(id)?.(),
+      onData: (part) => dataCallbacks.get(id)?.(part),
     })
     chats.set(id, chat)
   }
@@ -80,4 +93,5 @@ export function discardChat(id: string): void {
   chats.delete(id)
   sendOptions.delete(id)
   finishCallbacks.delete(id)
+  dataCallbacks.delete(id)
 }

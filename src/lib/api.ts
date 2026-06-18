@@ -31,6 +31,16 @@ export type AgentUIMessage = UIMessage<UsageMetadata>
 export type LegacyMessage = { role: "user" | "assistant"; content: string }
 export type StoredMessage = UIMessage | LegacyMessage
 
+// Auto-compaction pointer (agent/lib/agent/compaction.ts): the model is fed a
+// summary of everything up to `throughMessageId` plus the messages after it. The
+// full history is still returned in `messages` — the UI shows it all and marks
+// where the summary ends. null/absent until the conversation is first compacted.
+export type CompactionState = {
+  summary: string
+  throughMessageId: string
+  tokens: number
+}
+
 export type Conversation = {
   id: string
   agentId: string
@@ -38,6 +48,7 @@ export type Conversation = {
   userId: string
   shared: boolean
   messages: StoredMessage[]
+  compaction?: CompactionState | null
   createdAt: string
   updatedAt: string
 }
