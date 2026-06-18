@@ -4,8 +4,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ModelPicker, type ModelSelection } from "@/components/model-picker"
 import { useProviders } from "@/hooks/use-providers"
+import { useDefaultModel } from "@/hooks/use-default-model"
 import { cn } from "@/lib/utils"
 import type { ProviderConfig, ProviderSettingsInput, ProviderType } from "@/lib/api"
 
@@ -88,6 +91,38 @@ export function ModelsSettings() {
           />
         )
       })}
+      <Separator />
+      <DefaultModelSection />
+    </div>
+  )
+}
+
+// The account default model: used for chats with no explicit selection and as
+// the fallback for background work (scheduled jobs, memory). Persisted server-
+// side; "Use default model" clears it back to the server's configured model.
+function DefaultModelSection() {
+  const { selected, set } = useDefaultModel()
+  const [saving, setSaving] = useState(false)
+
+  const choose = async (next: ModelSelection | null) => {
+    setSaving(true)
+    await set(next?.provider ?? null, next?.model ?? null)
+    setSaving(false)
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Label>Default model</Label>
+      <ModelPicker
+        value={selected}
+        onChange={(next) => void choose(next)}
+        busy={saving}
+        menuLabel="Default model"
+      />
+      <p className="text-xs text-muted-foreground">
+        Used for new chats when you haven't picked a model, and for background tasks like
+        scheduled jobs and memory. Falls back to the server's configured model.
+      </p>
     </div>
   )
 }

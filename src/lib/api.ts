@@ -9,6 +9,7 @@ const CONTEXT_URL = "/agent/context"
 const AGENTS_URL = "/agent/agents"
 const PROVIDERS_URL = "/agent/providers"
 const PROVIDER_TEST_URL = "/agent/provider-test"
+const SETTINGS_URL = "/agent/settings"
 const NOTES_URL = "/agent/notes"
 const JOBS_URL = "/agent/jobs"
 const JOB_RUNS_URL = "/agent/jobs/runs"
@@ -47,6 +48,10 @@ export type Agent = {
   name: string
   // Owner-written instructions appended to the backend's system prompt.
   systemPrompt: string | null
+  // Model the background memory extractor runs on (owner-picked). null pair →
+  // the backend's env-configured default model.
+  memoryProvider: ProviderType | null
+  memoryModel: string | null
   createdAt: string
   role: "owner" | "member"
 }
@@ -203,7 +208,13 @@ export async function createAgent(name: string): Promise<Agent> {
 // Owner-only on the backend. The update route returns the bare row (no role).
 export function updateAgent(
   id: string,
-  changes: { name?: string; systemPrompt?: string | null }
+  changes: {
+    name?: string
+    systemPrompt?: string | null
+    // Sent together (both null resets to the env default model).
+    memoryProvider?: ProviderType | null
+    memoryModel?: string | null
+  }
 ): Promise<Omit<Agent, "role">> {
   return request<Omit<Agent, "role">>(AGENTS_URL, {
     method: "PATCH",
@@ -212,6 +223,8 @@ export function updateAgent(
       id,
       ...(changes.name !== undefined && { name: changes.name }),
       ...(changes.systemPrompt !== undefined && { system_prompt: changes.systemPrompt }),
+      ...(changes.memoryProvider !== undefined && { memory_provider: changes.memoryProvider }),
+      ...(changes.memoryModel !== undefined && { memory_model: changes.memoryModel }),
     }),
   })
 }
@@ -227,7 +240,7 @@ export type ContextWindow = {
   contextLength: number | null
 }
 
-// Without a target it reports the backend's env-configured default model.
+// Without a target it reports the user's default model (else the env default).
 export function getContextWindow(target?: {
   provider: ProviderType
   model: string
@@ -577,5 +590,28 @@ export function saveProvider(
 export function deleteProvider(provider: ProviderType): Promise<void> {
   return request<void>(`${PROVIDERS_URL}?provider=${encodeURIComponent(provider)}`, {
     method: "DELETE",
+  })
+}
+
+// The user's default model: used for chats with no explicit selection, and as
+// the fallback for background work (scheduled jobs, memory). null = env default.
+export type UserSettings = {
+  defaultProvider: ProviderType | null
+  defaultModel: string | null
+}
+
+export function getUserSettings(): Promise<UserSettings> {
+  return request<UserSettings>(SETTINGS_URL)
+}
+
+// Sent as a pair (null on both resets to the env default model).
+export function updateDefaultModel(
+  provider: ProviderType | null,
+  model: string | null
+): Promise<UserSettings> {
+  return request<UserSettings>(SETTINGS_URL, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ default_provider: provider, default_model: model }),
   })
 }

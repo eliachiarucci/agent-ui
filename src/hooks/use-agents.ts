@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { createAgent, deleteAgent, listAgents, updateAgent, type Agent } from "@/lib/api"
+import {
+  createAgent,
+  deleteAgent,
+  listAgents,
+  updateAgent,
+  type Agent,
+  type ProviderType,
+} from "@/lib/api"
 
 const ACTIVE_AGENT_KEY = "agent-ui:active-agent"
 
@@ -63,7 +70,15 @@ export function useAgents() {
 
   /** Updates the agent (owner-only). Returns false on failure (already toasted). */
   const update = useCallback(
-    async (id: string, changes: { name?: string; systemPrompt?: string | null }) => {
+    async (
+      id: string,
+      changes: {
+        name?: string
+        systemPrompt?: string | null
+        memoryProvider?: ProviderType | null
+        memoryModel?: string | null
+      }
+    ) => {
       try {
         const updated = await updateAgent(id, changes)
         setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updated } : a)))

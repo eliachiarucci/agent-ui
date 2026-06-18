@@ -26,8 +26,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { AgentSwitcher } from "@/components/agent-switcher"
 import { AccountSettings } from "@/components/auth/account-settings"
 import { ModelsSettings } from "@/components/models-settings"
+import { ModelPicker } from "@/components/model-picker"
 import { cn } from "@/lib/utils"
-import type { Agent } from "@/lib/api"
+import type { Agent, ProviderType } from "@/lib/api"
 
 type SettingsDialogProps = {
   open: boolean
@@ -40,7 +41,11 @@ type SettingsDialogProps = {
   // Owner-only; resolves false on failure (already toasted by the hook).
   onUpdateAgent: (
     id: string,
-    changes: { systemPrompt?: string | null }
+    changes: {
+      systemPrompt?: string | null
+      memoryProvider?: ProviderType | null
+      memoryModel?: string | null
+    }
   ) => Promise<boolean>
   // Owner-only; deletes the agent with all its memories and conversations.
   onDeleteAgent: (id: string) => Promise<boolean>
@@ -202,6 +207,8 @@ function AgentTab({
             agent={activeAgent}
             onUpdateAgent={onUpdateAgent}
           />
+          <Separator />
+          <MemoryModelEditor agent={activeAgent} onUpdateAgent={onUpdateAgent} />
         </>
       )}
 
@@ -357,6 +364,52 @@ function SystemPromptEditor({
           {saving ? "Saving…" : "Save prompt"}
         </Button>
       )}
+    </div>
+  )
+}
+
+// Owner-only picker for the model the background memory extractor runs on for
+// this agent. Persisted on the agent via onUpdateAgent; resolved against the
+// owner's provider credentials server-side. "Default model" clears it.
+function MemoryModelEditor({
+  agent,
+  onUpdateAgent,
+}: {
+  agent: Agent
+  onUpdateAgent: SettingsDialogProps["onUpdateAgent"]
+}) {
+  const isOwner = agent.role === "owner"
+  const [saving, setSaving] = useState(false)
+
+  const selected: { provider: ProviderType; model: string } | null =
+    agent.memoryProvider && agent.memoryModel
+      ? { provider: agent.memoryProvider, model: agent.memoryModel }
+      : null
+
+  const choose = async (next: { provider: ProviderType; model: string } | null) => {
+    setSaving(true)
+    await onUpdateAgent(agent.id, {
+      memoryProvider: next?.provider ?? null,
+      memoryModel: next?.model ?? null,
+    })
+    setSaving(false)
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Label>Memory model</Label>
+      <ModelPicker
+        value={selected}
+        onChange={(next) => void choose(next)}
+        disabled={!isOwner}
+        busy={saving}
+        menuLabel="Memory model"
+      />
+      <p className="text-xs text-muted-foreground">
+        {isOwner
+          ? "The model that reviews each message in the background and updates this agent's memories. Defaults to your account's default model."
+          : "Only the agent's owner can change the memory model."}
+      </p>
     </div>
   )
 }
