@@ -9,6 +9,8 @@ import { EmptyState } from "@/components/chat/empty-state"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { setChatDataCallback } from "@/lib/chat"
+import { useActiveModel } from "@/lib/active-model"
+import { useDefaultModel } from "@/hooks/use-default-model"
 import { formatAttachmentsMarker, uploadFile, type AgentUIMessage } from "@/lib/api"
 
 type ChatViewProps = {
@@ -57,11 +59,24 @@ export function ChatView({
   const busy = status === "submitted" || status === "streaming"
   const isNew = messages.length === 0
 
+  // A model must be selected to chat: the active override, else the account
+  // default (there is no server fallback). With neither, sending is blocked and
+  // the status-bar selector prompts the user to pick one.
+  const active = useActiveModel()
+  const { selected: defaultModel } = useDefaultModel()
+  const hasModel = Boolean(active || defaultModel)
+
   // Attachments are uploaded to the conversation's workspace first, then the
   // message carries an <attached-files> marker (rendered as chips, read by the
   // agent via readFile). Upload failure aborts the send so the composer can
   // keep the chips for a retry.
   const send = async (text: string, attachments: PendingAttachment[] = []) => {
+    if (!hasModel) {
+      toast.error("Select a model first", {
+        description: "Pick a default model in Settings → Models, or choose one in the status bar below.",
+      })
+      return
+    }
     try {
       await Promise.all(
         attachments.map((a) =>
@@ -130,7 +145,7 @@ export function ChatView({
           </div>
         </div>
       )}
-      <ChatInput busy={busy} onSend={send} onStop={() => void stop()} />
+      <ChatInput busy={busy} noModel={!hasModel} onSend={send} onStop={() => void stop()} />
       <StatusBar messages={messages} />
     </div>
   )

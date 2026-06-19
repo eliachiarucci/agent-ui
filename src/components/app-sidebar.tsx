@@ -153,34 +153,29 @@ export function AppSidebar({
 
       <Separator />
       <div className="flex flex-col gap-2 p-3">
-        <div className="flex items-center gap-2">
-          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenJobs}>
+        <div className="grid grid-cols-2 gap-2">
+          <Button variant="outline" className="w-full justify-start gap-2" onClick={onOpenJobs}>
             <CalendarClock className="size-4" />
             Jobs
           </Button>
-          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenNotes}>
+          <Button variant="outline" className="w-full justify-start gap-2" onClick={onOpenNotes}>
             <StickyNote className="size-4" />
             Notes
           </Button>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Open settings"
-            onClick={onOpenSettings}
-          >
-            <Settings className="size-4" />
-          </Button>
-          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenMemories}>
+          <Button variant="outline" className="w-full justify-start gap-2" onClick={onOpenMemories}>
             <Brain className="size-4" />
             Memories
           </Button>
-          <Button variant="outline" className="flex-1 justify-start gap-2" onClick={onOpenFiles}>
+          <Button variant="outline" className="w-full justify-start gap-2" onClick={onOpenFiles}>
             <FolderOpen className="size-4" />
             Files
           </Button>
         </div>
+        <Separator />
+        <Button variant="outline" className="w-full justify-start gap-2" onClick={onOpenSettings}>
+          <Settings className="size-4" />
+          Settings
+        </Button>
       </div>
 
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>

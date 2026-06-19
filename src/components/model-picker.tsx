@@ -21,6 +21,8 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   google: "Google",
   deepinfra: "DeepInfra",
   tensorx: "TensorX",
+  openrouter: "OpenRouter",
+  openai: "OpenAI",
 }
 
 // Full-width provider → model dropdown. Configured providers expand to a
@@ -34,6 +36,7 @@ export function ModelPicker({
   emptyLabel = "Default model",
   clearLabel = "Use default model",
   menuLabel = "Model",
+  clearable = true,
 }: {
   value: ModelSelection | null
   onChange: (next: ModelSelection | null) => void
@@ -42,6 +45,8 @@ export function ModelPicker({
   emptyLabel?: string
   clearLabel?: string
   menuLabel?: string
+  // When false, the "clear" item is hidden so a selection is mandatory.
+  clearable?: boolean
 }) {
   const { providers } = useProviders()
   const [expanded, setExpanded] = useState<ProviderType | null>(null)
@@ -147,11 +152,15 @@ export function ModelPicker({
             </div>
           )
         })}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-xs" onSelect={() => onChange(null)}>
-          {clearLabel}
-          {!configured && <Check className="ml-auto size-3.5 shrink-0" />}
-        </DropdownMenuItem>
+        {clearable && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem className="text-xs" onSelect={() => onChange(null)}>
+              {clearLabel}
+              {!configured && <Check className="ml-auto size-3.5 shrink-0" />}
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   )

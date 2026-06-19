@@ -20,17 +20,21 @@ const PASTE_AS_FILE_THRESHOLD = 5000
 
 type ChatInputProps = {
   busy: boolean
+  // No model is selected (no override, no default) — sending is blocked until
+  // the user picks one in the status bar or Settings → Models.
+  noModel?: boolean
   onSend: (text: string, attachments: PendingAttachment[]) => Promise<void> | void
   onStop: () => void
 }
 
-export function ChatInput({ busy, onSend, onStop }: ChatInputProps) {
+export function ChatInput({ busy, noModel = false, onSend, onStop }: ChatInputProps) {
   const [value, setValue] = useState("")
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   // True only while attachments upload, before the stream sets `busy`.
   const [sending, setSending] = useState(false)
 
-  const canSend = (value.trim() !== "" || attachments.length > 0) && !busy && !sending
+  const canSend =
+    (value.trim() !== "" || attachments.length > 0) && !busy && !sending && !noModel
 
   const submit = async () => {
     if (!canSend) return
@@ -117,6 +121,11 @@ export function ChatInput({ busy, onSend, onStop }: ChatInputProps) {
             </Button>
           )}
         </div>
+        {noModel && (
+          <p className="text-xs text-amber-600 dark:text-amber-500">
+            No model selected — pick one in the status bar below or in Settings → Models to start chatting.
+          </p>
+        )}
       </div>
     </div>
   )

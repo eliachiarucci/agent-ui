@@ -57,7 +57,7 @@ export function StatusBar({ messages }: StatusBarProps) {
           {ratio !== null && ` (${Math.round(ratio * 100)}%)`}
         </span>
       </div>
-      <ModelSelector fallbackModel={window?.model} />
+      <ModelSelector />
     </footer>
   )
 }

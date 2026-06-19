@@ -9,6 +9,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useProviders } from "@/hooks/use-providers"
+import { useDefaultModel } from "@/hooks/use-default-model"
 import { setActiveModel, useActiveModel } from "@/lib/active-model"
 import { testProvider, type ProviderConfig, type ProviderType } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -19,28 +20,39 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   google: "Google",
   deepinfra: "DeepInfra",
   tensorx: "TensorX",
+  openrouter: "OpenRouter",
+  openai: "OpenAI",
 }
 
 // Status-bar model picker: a menu of configured providers; clicking one expands
 // an indented, live-fetched list of its models. Picking a model makes it the
-// active model for subsequent chat requests; "Default" returns to the backend's
-// env-configured model.
-export function ModelSelector({ fallbackModel }: { fallbackModel?: string }) {
+// active override for subsequent chat requests; "Use default model" drops the
+// override back to the account default. With no override and no default, no
+// model is selected and the selector prompts the user to pick one.
+export function ModelSelector() {
   const { providers } = useProviders()
   const active = useActiveModel()
+  const { selected: defaultModel } = useDefaultModel()
   const [expanded, setExpanded] = useState<ProviderType | null>(null)
   // undefined = not fetched yet, "loading" = in flight, [] = fetched but empty.
   const [modelsByProvider, setModelsByProvider] = useState<
     Partial<Record<ProviderType, string[] | "loading">>
   >({})
 
-  // A selection whose provider was removed in settings silently falls back to
-  // the default model server-side; reflect that here instead of lying.
+  // A selection whose provider was removed in settings doesn't count. The model
+  // the chat will actually use is the active override, else the account default;
+  // with neither, nothing is selected and the user must pick one.
   const activeConfigured =
     active && providers.some((p) => p.provider === active.provider) ? active : null
-  const label = activeConfigured
-    ? `${PROVIDER_LABELS[activeConfigured.provider]} · ${activeConfigured.model}`
-    : (fallbackModel ?? "model")
+  const defaultConfigured =
+    defaultModel && providers.some((p) => p.provider === defaultModel.provider)
+      ? defaultModel
+      : null
+  const effective = activeConfigured ?? defaultConfigured
+  const hasModel = effective !== null
+  const label = effective
+    ? `${PROVIDER_LABELS[effective.provider]} · ${effective.model}`
+    : "Select a model"
 
   const toggleProvider = async (config: ProviderConfig) => {
     const provider = config.provider
@@ -66,7 +78,14 @@ export function ModelSelector({ fallbackModel }: { fallbackModel?: string }) {
         }
       }}
     >
-      <DropdownMenuTrigger className="flex max-w-56 items-center gap-1 rounded px-1 text-[11px] text-muted-foreground outline-none hover:text-foreground data-[state=open]:text-foreground">
+      <DropdownMenuTrigger
+        className={cn(
+          "flex max-w-56 items-center gap-1 rounded px-1 text-[11px] outline-none data-[state=open]:text-foreground",
+          hasModel
+            ? "text-muted-foreground hover:text-foreground"
+            : "font-medium text-amber-600 hover:text-amber-600 dark:text-amber-500"
+        )}
+      >
         <span className="truncate">{label}</span>
         <ChevronsUpDown className="size-3 shrink-0" />
       </DropdownMenuTrigger>
@@ -108,8 +127,7 @@ export function ModelSelector({ fallbackModel }: { fallbackModel?: string }) {
                 ) : (
                   models.map((model) => {
                     const isActive =
-                      activeConfigured?.provider === provider &&
-                      activeConfigured.model === model
+                      effective?.provider === provider && effective.model === model
                     return (
                       <DropdownMenuItem
                         key={model}
@@ -125,7 +143,7 @@ export function ModelSelector({ fallbackModel }: { fallbackModel?: string }) {
             </div>
           )
         })}
-        {activeConfigured && (
+        {activeConfigured && defaultConfigured && (
           <>
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-xs" onSelect={() => setActiveModel(null)}>

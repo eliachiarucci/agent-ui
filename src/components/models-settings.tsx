@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, ChevronDown, Cloud, Gem, Loader2, Plug, Server, Sparkles, Trash2, Zap } from "lucide-react"
+import { Bot, Check, ChevronDown, Cloud, Gem, Loader2, Plug, Server, Sparkles, Trash2, Waypoints, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -61,6 +61,22 @@ const PROVIDERS: Array<{
     keyPlaceholder: "Your TensorX API key",
     keyHelp: "Create an API key in the TensorX dashboard (tensorx.ai).",
   },
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    description: "Hundreds of models from many providers through one OpenRouter key.",
+    icon: Waypoints,
+    keyPlaceholder: "sk-or-...",
+    keyHelp: "Create an API key in the OpenRouter dashboard (openrouter.ai/keys).",
+  },
+  {
+    id: "openai",
+    name: "OpenAI",
+    description: "GPT and o-series models through the OpenAI API.",
+    icon: Bot,
+    keyPlaceholder: "sk-...",
+    keyHelp: "Create an API key at platform.openai.com/api-keys.",
+  },
 ]
 
 export function ModelsSettings() {
@@ -79,6 +95,8 @@ export function ModelsSettings() {
 
   return (
     <div className="grid gap-3">
+      <DefaultModelSection />
+      <Separator />
       <p className="text-xs text-muted-foreground">
         Connect a model provider. Settings are verified with a test request before they
         are saved. Pick the active model from the selector in the chat's status bar.
@@ -99,8 +117,6 @@ export function ModelsSettings() {
           />
         )
       })}
-      <Separator />
-      <DefaultModelSection />
     </div>
   )
 }
@@ -109,28 +125,41 @@ export function ModelsSettings() {
 // the fallback for background work (scheduled jobs, memory). Persisted server-
 // side; "Use default model" clears it back to the server's configured model.
 function DefaultModelSection() {
-  const { selected, set } = useDefaultModel()
+  const { selected, loading, set } = useDefaultModel()
   const [saving, setSaving] = useState(false)
 
+  // Mandatory: the picker hides its clear item, so `next` is always a selection.
   const choose = async (next: ModelSelection | null) => {
+    if (!next) return
     setSaving(true)
-    await set(next?.provider ?? null, next?.model ?? null)
+    await set(next.provider, next.model)
     setSaving(false)
   }
 
   return (
     <div className="grid gap-2">
-      <Label>Default model</Label>
+      <Label>
+        Default model <span className="text-destructive">*</span>
+      </Label>
       <ModelPicker
         value={selected}
         onChange={(next) => void choose(next)}
         busy={saving}
         menuLabel="Default model"
+        emptyLabel="Select a model"
+        clearable={false}
       />
-      <p className="text-xs text-muted-foreground">
-        Used for new chats when you haven't picked a model, and for background tasks like
-        scheduled jobs and memory. Falls back to the server's configured model.
-      </p>
+      {!loading && !selected ? (
+        <p className="text-xs text-amber-600 dark:text-amber-500">
+          Required — pick a model to start chatting. Without one, the agent can't run.
+          Add a provider below first if you haven't.
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          Used for every chat (unless you override it in the status bar) and for background
+          tasks like scheduled jobs and memory.
+        </p>
+      )}
     </div>
   )
 }

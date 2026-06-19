@@ -90,6 +90,8 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   google: "Google",
   deepinfra: "DeepInfra",
   tensorx: "TensorX",
+  openrouter: "OpenRouter",
+  openai: "OpenAI",
 }
 
 function scheduleSummary(job: CronJob): string {
