@@ -556,7 +556,7 @@ export function listCronRuns(): Promise<CronJobRun[]> {
 
 // ── Model providers ─────────────────────────────────────────────────────────
 
-export type ProviderType = "lmstudio" | "anthropic" | "google" | "deepinfra"
+export type ProviderType = "lmstudio" | "anthropic" | "google" | "deepinfra" | "tensorx"
 
 // What the user types into a provider card. apiKey may be omitted on updates:
 // the backend then reuses the stored key.

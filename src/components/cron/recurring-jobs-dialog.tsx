@@ -89,6 +89,7 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   anthropic: "Anthropic",
   google: "Google",
   deepinfra: "DeepInfra",
+  tensorx: "TensorX",
 }
 
 function scheduleSummary(job: CronJob): string {

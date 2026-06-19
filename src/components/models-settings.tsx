@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, ChevronDown, Cloud, Gem, Loader2, Plug, Server, Sparkles, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Cloud, Gem, Loader2, Plug, Server, Sparkles, Trash2, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -52,6 +52,14 @@ const PROVIDERS: Array<{
     icon: Cloud,
     keyPlaceholder: "Your DeepInfra API key",
     keyHelp: "Create an API key in the DeepInfra dashboard (deepinfra.com/dash/api_keys).",
+  },
+  {
+    id: "tensorx",
+    name: "TensorX",
+    description: "Open models through TensorX's OpenAI-compatible inference cloud.",
+    icon: Zap,
+    keyPlaceholder: "Your TensorX API key",
+    keyHelp: "Create an API key in the TensorX dashboard (tensorx.ai).",
   },
 ]
 

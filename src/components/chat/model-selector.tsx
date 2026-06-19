@@ -18,6 +18,7 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   anthropic: "Anthropic",
   google: "Google",
   deepinfra: "DeepInfra",
+  tensorx: "TensorX",
 }
 
 // Status-bar model picker: a menu of configured providers; clicking one expands

@@ -20,6 +20,7 @@ const PROVIDER_LABELS: Record<ProviderType, string> = {
   anthropic: "Anthropic",
   google: "Google",
   deepinfra: "DeepInfra",
+  tensorx: "TensorX",
 }
 
 // Full-width provider → model dropdown. Configured providers expand to a
