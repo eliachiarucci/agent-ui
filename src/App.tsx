@@ -9,7 +9,7 @@ import { NotesDialog } from "@/components/notes/notes-dialog"
 import { NoteEditorDialog } from "@/components/notes/note-editor-dialog"
 import { RecurringJobsDialog } from "@/components/cron/recurring-jobs-dialog"
 import { FileViewer } from "@/components/files/file-viewer"
-import { SettingsDialog } from "@/components/settings-dialog"
+import { SettingsDialog, type SettingsTabId } from "@/components/settings-dialog"
 import { LoginPage } from "@/components/auth/login-page"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
@@ -17,7 +17,7 @@ import { useAgents } from "@/hooks/use-agents"
 import { useNotes } from "@/hooks/use-notes"
 import { useConversations } from "@/hooks/use-conversations"
 import { useIsMobile } from "@/hooks/use-is-mobile"
-import { getConversation, listNotes, toUIMessages, type Note } from "@/lib/api"
+import { conversationTitle, getConversation, listNotes, toUIMessages, type Note } from "@/lib/api"
 import { authClient } from "@/lib/auth-client"
 import { discardChat, getChat, setChatOptions } from "@/lib/chat"
 import { chatFileNames, latestPresentedFile } from "@/lib/chat-files"
@@ -57,13 +57,38 @@ function Workspace() {
   const { conversations, loading, refresh, add, remove } = useConversations(activeAgentId)
   // New chats get a client-generated id; the backend creates the row on first message.
   const [activeId, setActiveId] = useState<string>(() => randomUUID())
-  // Private/shared choice for the next conversation; fixed server-side at creation.
+  // Private/shared and memory choices for the next conversation; both fixed
+  // server-side at creation.
   const [newChatShared, setNewChatShared] = useState(false)
+  const [newChatMemory, setNewChatMemory] = useState(true)
   const [memoriesOpen, setMemoriesOpen] = useState(false)
   const [filesOpen, setFilesOpen] = useState(false)
   const [notesOpen, setNotesOpen] = useState(false)
   const [jobsOpen, setJobsOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [settingsTab, setSettingsTab] = useState<SettingsTabId | undefined>()
+
+  // OAuth connector callback landing: /agent/connectors/<id>/callback redirects
+  // back here with query params. Toast the outcome, reopen Settings → Tools,
+  // and clean the URL so a reload doesn't replay it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const connector = params.get("connector")
+    const status = params.get("connector_status")
+    if (!connector || !status) return
+    const name = connector === "gmail" ? "Gmail" : connector
+    if (status === "connected") {
+      toast.success(`${name} connected`)
+    } else {
+      toast.error(`Connecting ${name} failed`, {
+        description: params.get("connector_error") ?? undefined,
+      })
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: one-shot state seeded from the callback URL on mount
+    setSettingsTab("tools")
+    setSettingsOpen(true)
+    window.history.replaceState(null, "", window.location.pathname)
+  }, [])
   const isMobile = useIsMobile()
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile)
 
@@ -121,8 +146,16 @@ function Workspace() {
   // The transport reads these when a message is sent; the backend only honors
   // them when it creates the conversation row.
   useEffect(() => {
-    setChatOptions(activeId, { agentId: activeAgentId, shared: newChatShared })
-  }, [activeId, activeAgentId, newChatShared])
+    setChatOptions(activeId, {
+      agentId: activeAgentId,
+      shared: newChatShared,
+      memory: newChatMemory,
+    })
+  }, [activeId, activeAgentId, newChatShared, newChatMemory])
+
+  // The open conversation's row, once it exists (undefined for a not-yet-started
+  // chat — the row is created with the first message).
+  const activeConversation = conversations.find((c) => c.id === activeId)
 
   // Cached per conversation in lib/chat.ts; switching chats swaps which cached
   // instance is rendered without interrupting an in-flight stream.
@@ -137,8 +170,7 @@ function Workspace() {
 
   // Where the auto-compaction summary ends, if the conversation was compacted:
   // the message list marks everything up to here as "summarized for context".
-  const summarizedThroughId = conversations.find((c) => c.id === activeId)?.compaction
-    ?.throughMessageId
+  const summarizedThroughId = activeConversation?.compaction?.throughMessageId
 
   // Second subscriber to the same Chat instance as ChatView: the workspace
   // derives the file-viewer state (tabs, presentFile auto-open) from the
@@ -172,6 +204,7 @@ function Workspace() {
       agentId: activeAgentId,
       userId: session?.user.id ?? "",
       shared: newChatShared,
+      memory: newChatMemory,
       messages: [{ role: "user", content: text }],
       createdAt: now,
       updatedAt: now,
@@ -181,6 +214,7 @@ function Workspace() {
   const handleSelect = (id: string) => {
     setActiveId(id)
     setNewChatShared(false)
+    setNewChatMemory(true)
     resetViewer()
     if (isMobile) setSidebarOpen(false)
   }
@@ -192,6 +226,7 @@ function Workspace() {
     selectAgent(id)
     setActiveId(randomUUID())
     setNewChatShared(false)
+    setNewChatMemory(true)
     resetViewer()
   }
 
@@ -201,6 +236,7 @@ function Workspace() {
     if (!agent) return false
     setActiveId(randomUUID())
     setNewChatShared(false)
+    setNewChatMemory(true)
     resetViewer()
     return true
   }
@@ -214,6 +250,7 @@ function Workspace() {
       discardChat(activeId)
       setActiveId(randomUUID())
       setNewChatShared(false)
+      setNewChatMemory(true)
       resetViewer()
     }
     return deleted
@@ -273,38 +310,45 @@ function Workspace() {
       />
 
       <main className="relative flex min-w-0 flex-1 flex-col">
-        {!sidebarOpen && (
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Open sidebar"
-            className="absolute left-2 top-2 z-10"
-            onClick={() => setSidebarOpen(true)}
-          >
-            <PanelLeft className="size-4" />
-          </Button>
-        )}
-        {viewedFile && !viewerOpen && (
-          <Button
-            variant="outline"
-            size="icon"
-            aria-label="Open file viewer"
-            className="absolute top-2 right-2 z-10 shadow-sm"
-            onClick={() => setViewerOpen(true)}
-          >
-            <FileText className="size-4" />
-          </Button>
-        )}
         {/* Renderless provider: gives the tool chips inside the chat a way to
             open the file viewer. */}
         <FileViewerContext.Provider value={fileViewerActions}>
           <ChatView
             key={activeId}
             chat={chat}
-            shared={newChatShared}
+            title={activeConversation ? conversationTitle(activeConversation) : "New conversation"}
+            shared={activeConversation?.shared ?? newChatShared}
+            memory={activeConversation?.memory ?? newChatMemory}
             onSharedChange={setNewChatShared}
+            onMemoryChange={setNewChatMemory}
             onMessageSent={handleMessageSent}
             summarizedThroughId={summarizedThroughId}
+            headerStart={
+              !sidebarOpen ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Open sidebar"
+                  className="size-7"
+                  onClick={() => setSidebarOpen(true)}
+                >
+                  <PanelLeft className="size-4" />
+                </Button>
+              ) : undefined
+            }
+            headerEnd={
+              viewedFile && !viewerOpen ? (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Open file viewer"
+                  className="size-7"
+                  onClick={() => setViewerOpen(true)}
+                >
+                  <FileText className="size-4" />
+                </Button>
+              ) : undefined
+            }
           />
         </FileViewerContext.Provider>
       </main>
@@ -353,7 +397,11 @@ function Workspace() {
       />
       <SettingsDialog
         open={settingsOpen}
-        onOpenChange={setSettingsOpen}
+        onOpenChange={(open) => {
+          setSettingsOpen(open)
+          if (!open) setSettingsTab(undefined)
+        }}
+        initialTab={settingsTab}
         agents={agents}
         activeAgentId={activeAgentId}
         onSelectAgent={handleSelectAgent}

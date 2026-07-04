@@ -77,6 +77,10 @@ export function useAgents() {
         systemPrompt?: string | null
         memoryProvider?: ProviderType | null
         memoryModel?: string | null
+        chatMemoryEnabled?: boolean
+        chatMemoryPrompt?: string | null
+        memoryExtractionEnabled?: boolean
+        memoryExtractionPrompt?: string | null
       }
     ) => {
       try {

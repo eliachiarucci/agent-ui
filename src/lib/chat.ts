@@ -4,9 +4,9 @@ import { getActiveModel } from "@/lib/active-model"
 import { attachmentsFromParts, isVisibleTextPart, type AgentUIMessage } from "@/lib/api"
 
 // Per-chat send options, set by the UI before the first message goes out. The
-// backend only honors agent_id/shared when it creates the conversation row, so
-// sending them on every request is harmless for existing conversations.
-type ChatSendOptions = { agentId?: string; shared?: boolean }
+// backend only honors agent_id/shared/memory when it creates the conversation
+// row, so sending them on every request is harmless for existing conversations.
+type ChatSendOptions = { agentId?: string; shared?: boolean; memory?: boolean }
 const sendOptions = new Map<string, ChatSendOptions>()
 
 export function setChatOptions(id: string, options: ChatSendOptions): void {
@@ -37,6 +37,7 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
         ...(attachments.length > 0 ? { attachments } : {}),
         ...(options?.agentId ? { agent_id: options.agentId } : {}),
         ...(options?.shared !== undefined ? { shared: options.shared } : {}),
+        ...(options?.memory !== undefined ? { memory: options.memory } : {}),
         ...(active ? { provider: active.provider, model: active.model } : {}),
         // The backend's scheduling tools interpret times in the sender's timezone.
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,

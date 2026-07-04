@@ -1,39 +1,95 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, type ReactNode } from "react"
 import { useChat, type Chat } from "@ai-sdk/react"
-import { Lock, Users } from "lucide-react"
+import { Brain, Lock, LockOpen } from "lucide-react"
 import { toast } from "sonner"
 import { MessageList } from "@/components/chat/message-list"
 import { ChatInput, type PendingAttachment } from "@/components/chat/chat-input"
 import { StatusBar } from "@/components/chat/status-bar"
 import { EmptyState } from "@/components/chat/empty-state"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
+import { Button } from "@/components/ui/button"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { setChatDataCallback } from "@/lib/chat"
 import { useActiveModel } from "@/lib/active-model"
 import { useDefaultModel } from "@/hooks/use-default-model"
 import { formatAttachmentsMarker, uploadFile, type AgentUIMessage } from "@/lib/api"
+import { cn } from "@/lib/utils"
 
 type ChatViewProps = {
   // Owned and cached by App so the stream survives switching conversations.
   chat: Chat<AgentUIMessage>
-  // Private/shared choice for a conversation that hasn't started yet. The flag
-  // is fixed at creation server-side, so the toggle disappears after the first
-  // message.
+  // Conversation title shown in the top bar ("New conversation" until it has one).
+  title: string
+  // Private/shared and memory choices. Both flags are fixed server-side at
+  // creation, so the top-bar toggles only work while the conversation has no
+  // messages; afterwards they just reflect the stored state.
   shared: boolean
+  memory: boolean
   onSharedChange: (shared: boolean) => void
+  onMemoryChange: (memory: boolean) => void
   // Fires as a message is sent, so the app can show a new conversation in the
   // sidebar immediately instead of waiting for the turn to finish.
   onMessageSent: (text: string) => void
   // Id of the last message folded into the auto-compaction summary, if any.
   summarizedThroughId?: string
+  // Contextual controls hosted at the edges of the top bar (App's sidebar
+  // reopen and file-viewer buttons).
+  headerStart?: ReactNode
+  headerEnd?: ReactNode
+}
+
+// Icon toggle in the top bar. Radix tooltips never open on disabled elements,
+// so a locked toggle stays enabled and just ignores clicks — the tooltip keeps
+// explaining the (now fixed) setting.
+function HeaderToggle({
+  label,
+  tooltip,
+  locked,
+  onToggle,
+  children,
+}: {
+  label: string
+  tooltip: string
+  locked: boolean
+  onToggle: () => void
+  children: ReactNode
+}) {
+  return (
+    <Tooltip delayDuration={150}>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon"
+          className={cn(
+            "size-7",
+            locked && "cursor-default hover:bg-transparent dark:hover:bg-transparent"
+          )}
+          aria-label={label}
+          aria-disabled={locked || undefined}
+          onClick={() => {
+            if (!locked) onToggle()
+          }}
+        >
+          {children}
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-64">
+        {tooltip}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 export function ChatView({
   chat,
+  title,
   shared,
+  memory,
   onSharedChange,
+  onMemoryChange,
   onMessageSent,
   summarizedThroughId,
+  headerStart,
+  headerEnd,
 }: ChatViewProps) {
   const { messages, sendMessage, status, error, stop } = useChat({ chat })
 
@@ -109,8 +165,57 @@ export function ChatView({
     void sendMessage({ parts })
   }
 
+  // Both settings lock once the conversation has its first message (they are
+  // fixed server-side at creation).
+  const lockedNote = " This was set when the conversation started and can't be changed."
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <header className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
+        {headerStart}
+        <h1 className="min-w-0 flex-1 truncate px-1 text-sm font-medium">{title}</h1>
+        <HeaderToggle
+          label={memory ? "Disable memory for this chat" : "Enable memory for this chat"}
+          locked={!isNew}
+          onToggle={() => onMemoryChange(!memory)}
+          tooltip={
+            (memory
+              ? "Memory is on: the agent recalls stored memories and saves new facts from this chat."
+              : "Memory is off: the agent won't recall or save memories in this chat.") +
+            (isNew ? (memory ? " Click to turn it off." : " Click to turn it on.") : lockedNote)
+          }
+        >
+          <span
+            className={cn(
+              "relative flex items-center justify-center",
+              !memory && "text-muted-foreground"
+            )}
+          >
+            <Brain className={cn("size-4", !memory && "opacity-50")} />
+            {!memory && (
+              <span className="absolute h-px w-4.5 -rotate-45 rounded-full bg-current" />
+            )}
+          </span>
+        </HeaderToggle>
+        <HeaderToggle
+          label={shared ? "Make this chat private" : "Share this chat"}
+          locked={!isNew}
+          onToggle={() => onSharedChange(!shared)}
+          tooltip={
+            (shared
+              ? "Shared conversation: everyone with access to this agent can see and continue it."
+              : "Private conversation: only you can see it.") +
+            (isNew
+              ? shared
+                ? " Click to make it private."
+                : " Click to share it with everyone on this agent."
+              : lockedNote)
+          }
+        >
+          {shared ? <LockOpen className="size-4" /> : <Lock className="size-4" />}
+        </HeaderToggle>
+        {headerEnd}
+      </header>
       {isNew ? (
         <EmptyState onSuggestion={send} />
       ) : (
@@ -122,28 +227,6 @@ export function ChatView({
           summarizedThroughId={summarizedThroughId}
           compacting={compacting}
         />
-      )}
-      {isNew && (
-        <div className="px-4 pb-2">
-          <div className="mx-auto flex w-full max-w-4xl items-center gap-3 rounded-md border bg-muted/40 px-3 py-2">
-            {shared ? (
-              <Users className="size-4 shrink-0 text-muted-foreground" />
-            ) : (
-              <Lock className="size-4 shrink-0 text-muted-foreground" />
-            )}
-            <div className="min-w-0 flex-1">
-              <Label htmlFor="shared-toggle" className="text-sm">
-                {shared ? "Shared conversation" : "Private conversation"}
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                {shared
-                  ? "Everyone with access to this agent can see and continue this conversation."
-                  : "Only you can see this conversation. The agent's memory is still shared with its members."}
-              </p>
-            </div>
-            <Switch id="shared-toggle" checked={shared} onCheckedChange={onSharedChange} />
-          </div>
-        </div>
       )}
       <ChatInput busy={busy} noModel={!hasModel} onSend={send} onStop={() => void stop()} />
       <StatusBar messages={messages} />

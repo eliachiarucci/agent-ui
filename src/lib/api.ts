@@ -12,6 +12,7 @@ const PROVIDER_TEST_URL = "/agent/provider-test"
 const SETTINGS_URL = "/agent/settings"
 const NOTES_URL = "/agent/notes"
 const MEMORY_CONVERSATIONS_URL = "/agent/memory-conversations"
+const MEMORY_PROMPT_URL = "/agent/memory-prompt"
 const JOBS_URL = "/agent/jobs"
 const JOB_RUNS_URL = "/agent/jobs/runs"
 
@@ -47,6 +48,9 @@ export type Conversation = {
   // Creator. Shared conversations are visible to every member of the agent.
   userId: string
   shared: boolean
+  // Whether the agent's memory applies to this conversation (recall + saving).
+  // Like `shared`, fixed server-side at creation.
+  memory: boolean
   messages: StoredMessage[]
   compaction?: CompactionState | null
   createdAt: string
@@ -64,6 +68,15 @@ export type Agent = {
   // the backend's env-configured default model.
   memoryProvider: ProviderType | null
   memoryModel: string | null
+  // The chat model's memory surface (memory instructions + tools + recalled
+  // memories): owners can switch it off per agent and replace the built-in
+  // instructions (null → the built-in ones).
+  chatMemoryEnabled: boolean
+  chatMemoryPrompt: string | null
+  // The background extraction "second pass": owners can switch it off per
+  // agent and replace the extractor's system prompt (null → the built-in one).
+  memoryExtractionEnabled: boolean
+  memoryExtractionPrompt: string | null
   createdAt: string
   role: "owner" | "member"
 }
@@ -226,6 +239,12 @@ export function updateAgent(
     // Sent together (both null resets to the env default model).
     memoryProvider?: ProviderType | null
     memoryModel?: string | null
+    chatMemoryEnabled?: boolean
+    // null clears the override back to the built-in memory instructions.
+    chatMemoryPrompt?: string | null
+    memoryExtractionEnabled?: boolean
+    // null clears the override back to the built-in extraction prompt.
+    memoryExtractionPrompt?: string | null
   }
 ): Promise<Omit<Agent, "role">> {
   return request<Omit<Agent, "role">>(AGENTS_URL, {
@@ -237,8 +256,27 @@ export function updateAgent(
       ...(changes.systemPrompt !== undefined && { system_prompt: changes.systemPrompt }),
       ...(changes.memoryProvider !== undefined && { memory_provider: changes.memoryProvider }),
       ...(changes.memoryModel !== undefined && { memory_model: changes.memoryModel }),
+      ...(changes.chatMemoryEnabled !== undefined && {
+        chat_memory_enabled: changes.chatMemoryEnabled,
+      }),
+      ...(changes.chatMemoryPrompt !== undefined && {
+        chat_memory_prompt: changes.chatMemoryPrompt,
+      }),
+      ...(changes.memoryExtractionEnabled !== undefined && {
+        memory_extraction_enabled: changes.memoryExtractionEnabled,
+      }),
+      ...(changes.memoryExtractionPrompt !== undefined && {
+        memory_extraction_prompt: changes.memoryExtractionPrompt,
+      }),
     }),
   })
+}
+
+// The built-in memory prompts (the chat model's memory instructions and the
+// background extractor's system prompt), offered as starting points when
+// writing custom ones in Settings → Memories.
+export function getDefaultMemoryPrompts(): Promise<{ chat: string; extraction: string }> {
+  return request<{ chat: string; extraction: string }>(MEMORY_PROMPT_URL)
 }
 
 // Owner-only on the backend; cascades to the agent's memories, conversations,
@@ -609,6 +647,93 @@ export function deleteProvider(provider: ProviderType): Promise<void> {
   return request<void>(`${PROVIDERS_URL}?provider=${encodeURIComponent(provider)}`, {
     method: "DELETE",
   })
+}
+
+// ── Connectors & tool permissions ───────────────────────────────────────────
+
+const CONNECTORS_URL = "/agent/connectors"
+const TOOL_PERMISSIONS_URL = "/agent/tool-permissions"
+
+export type ConnectorType = "gmail"
+export type ConnectorStatus = "disconnected" | "connected" | "error"
+
+// One tool of a connector, as listed in the backend's catalog. `kind` groups
+// the permission toggles (read vs write).
+export type ConnectorToolInfo = {
+  name: string
+  kind: "read" | "write"
+  description: string
+}
+
+// Catalog entry merged with the user's stored configuration. The client secret
+// never comes back; the server only says whether one is stored.
+export type ConnectorInfo = {
+  connector: ConnectorType
+  name: string
+  scopes: string[]
+  tools: ConnectorToolInfo[]
+  // What the user must register on their OAuth client in Google Cloud.
+  redirectUri: string
+  clientId: string | null
+  hasClientSecret: boolean
+  status: ConnectorStatus
+  // The connected Google account, once linked.
+  email: string | null
+  updatedAt: string | null
+}
+
+export function listConnectors(): Promise<ConnectorInfo[]> {
+  return request<ConnectorInfo[]>(CONNECTORS_URL)
+}
+
+// clientSecret may be omitted on updates: the backend then reuses the stored one.
+export function saveConnector(
+  connector: ConnectorType,
+  input: { clientId: string; clientSecret?: string }
+): Promise<ConnectorInfo> {
+  return request<ConnectorInfo>(`${CONNECTORS_URL}/${connector}`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  })
+}
+
+// Disconnects (revoking the Google grant best-effort) and forgets the credentials.
+export function deleteConnector(connector: ConnectorType): Promise<void> {
+  return request<void>(`${CONNECTORS_URL}/${connector}`, { method: "DELETE" })
+}
+
+// Full-page navigation target that starts the OAuth flow: the backend 302s to
+// Google's consent screen and the callback lands back on the SPA with
+// ?connector=...&connector_status=... query params.
+export function connectorAuthorizeUrl(connector: ConnectorType): string {
+  return `${CONNECTORS_URL}/${connector}/authorize`
+}
+
+// Per-tool switches scoped to one chat model: { [connector]: { [tool]: enabled } }.
+// Missing keys mean enabled — only explicit false withholds a tool.
+export type ToolPermissions = Partial<Record<ConnectorType, Record<string, boolean>>>
+
+export function getToolPermissions(
+  provider: ProviderType,
+  model: string
+): Promise<ToolPermissions> {
+  const params = `provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model)}`
+  return request<{ permissions: ToolPermissions }>(`${TOOL_PERMISSIONS_URL}?${params}`).then(
+    (res) => res.permissions
+  )
+}
+
+export function saveToolPermissions(
+  provider: ProviderType,
+  model: string,
+  permissions: ToolPermissions
+): Promise<ToolPermissions> {
+  return request<{ permissions: ToolPermissions }>(TOOL_PERMISSIONS_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ provider, model, permissions }),
+  }).then((res) => res.permissions)
 }
 
 // Read-only view of what the background memory extractor did per source

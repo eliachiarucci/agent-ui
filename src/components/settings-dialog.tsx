@@ -1,5 +1,6 @@
-import { useState } from "react"
-import { Bot, Boxes, Info, Plus, Trash2, UserRound } from "lucide-react"
+import { useEffect, useState } from "react"
+import { Bot, Boxes, Info, Plus, Trash2, UserRound, Wrench } from "lucide-react"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -26,9 +28,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { AgentSwitcher } from "@/components/agent-switcher"
 import { AccountSettings } from "@/components/auth/account-settings"
 import { ModelsSettings } from "@/components/models-settings"
+import { ToolsSettings } from "@/components/tools-settings"
 import { ModelPicker } from "@/components/model-picker"
 import { cn } from "@/lib/utils"
-import type { Agent, ProviderType } from "@/lib/api"
+import { getDefaultMemoryPrompts, type Agent, type ProviderType } from "@/lib/api"
 
 type SettingsDialogProps = {
   open: boolean
@@ -45,20 +48,29 @@ type SettingsDialogProps = {
       systemPrompt?: string | null
       memoryProvider?: ProviderType | null
       memoryModel?: string | null
+      chatMemoryEnabled?: boolean
+      chatMemoryPrompt?: string | null
+      memoryExtractionEnabled?: boolean
+      memoryExtractionPrompt?: string | null
     }
   ) => Promise<boolean>
   // Owner-only; deletes the agent with all its memories and conversations.
   onDeleteAgent: (id: string) => Promise<boolean>
+  // When set, opening the dialog lands on this tab instead of the default
+  // (used by the OAuth callback landing to jump straight to Tools).
+  initialTab?: SettingsTabId
 }
 
 const TABS = [
   { id: "agent", label: "Agent", icon: Bot },
   { id: "models", label: "Models", icon: Boxes },
+  { id: "tools", label: "Tools", icon: Wrench },
   { id: "account", label: "Account", icon: UserRound },
   { id: "general", label: "General", icon: Info },
 ] as const
 
-type TabId = (typeof TABS)[number]["id"]
+export type SettingsTabId = (typeof TABS)[number]["id"]
+type TabId = SettingsTabId
 
 export function SettingsDialog({
   open,
@@ -69,8 +81,14 @@ export function SettingsDialog({
   onCreateAgent,
   onUpdateAgent,
   onDeleteAgent,
+  initialTab,
 }: SettingsDialogProps) {
   const [tab, setTab] = useState<TabId>("agent")
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional: jump to the requested tab on open
+    if (open && initialTab) setTab(initialTab)
+  }, [open, initialTab])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -123,6 +141,8 @@ export function SettingsDialog({
               />
             ) : tab === "models" ? (
               <ModelsSettings />
+            ) : tab === "tools" ? (
+              <ToolsSettings />
             ) : tab === "account" ? (
               <AccountSettings />
             ) : (
@@ -209,6 +229,7 @@ function AgentTab({
           />
           <Separator />
           <MemoryModelEditor agent={activeAgent} onUpdateAgent={onUpdateAgent} />
+          <MemorySettings agent={activeAgent} onUpdateAgent={onUpdateAgent} />
         </>
       )}
 
@@ -363,6 +384,203 @@ function SystemPromptEditor({
         >
           {saving ? "Saving…" : "Save prompt"}
         </Button>
+      )}
+    </div>
+  )
+}
+
+// Owner-tunable memory settings for the active agent, in two sections: the
+// chat model's own memory surface (instructions + tools + recalled memories)
+// and the background extraction "second pass" that mines facts after every
+// turn. Each has an on/off checkbox and a prompt override with a copyable
+// built-in default. Rendered inside the Agent tab, below the memory model.
+function MemorySettings({
+  agent,
+  onUpdateAgent,
+}: {
+  agent: Agent
+  onUpdateAgent: SettingsDialogProps["onUpdateAgent"]
+}) {
+  const isOwner = agent.role === "owner"
+
+  return (
+    <>
+      <Separator />
+
+      <div className="grid gap-2">
+        <Label>Memory in conversations</Label>
+        <p className="text-xs text-muted-foreground">
+          While you chat, “{agent.name}” carries memory instructions and tools to
+          recall and store facts about you.
+          {!isOwner && " Only the agent's owner can change these settings."}
+        </p>
+      </div>
+
+      <MemoryToggle
+        id="chat-memory-enabled"
+        label="Use memory in conversations"
+        description="When off, conversations run without memory instructions, recalled memories, or memory tools."
+        checked={agent.chatMemoryEnabled}
+        isOwner={isOwner}
+        onToggle={(enabled) => onUpdateAgent(agent.id, { chatMemoryEnabled: enabled })}
+      />
+
+      {/* Editors are keyed so drafts reset when the selected agent changes. */}
+      <MemoryPromptEditor
+        key={`chat-${agent.id}`}
+        id="chat-memory-prompt"
+        label="Memory prompt"
+        description="Replaces the built-in memory instructions of the chat model. Who the agent assists and its pinned core memories always apply."
+        saved={agent.chatMemoryPrompt ?? ""}
+        isOwner={isOwner}
+        onSave={(prompt) => onUpdateAgent(agent.id, { chatMemoryPrompt: prompt })}
+        loadDefault={() => getDefaultMemoryPrompts().then((p) => p.chat)}
+      />
+
+      <Separator />
+
+      <div className="grid gap-2">
+        <Label>Background memory extraction</Label>
+        <p className="text-xs text-muted-foreground">
+          After every exchange, “{agent.name}” runs a second pass with its memory
+          model to pick out durable facts and store them as memories.
+        </p>
+      </div>
+
+      <MemoryToggle
+        id="memory-extraction-enabled"
+        label="Extract memories automatically"
+        description="When off, the agent only remembers what it explicitly saves during the conversation; nothing is extracted in the background."
+        checked={agent.memoryExtractionEnabled}
+        isOwner={isOwner}
+        onToggle={(enabled) => onUpdateAgent(agent.id, { memoryExtractionEnabled: enabled })}
+      />
+
+      <MemoryPromptEditor
+        key={`extraction-${agent.id}`}
+        id="memory-extraction-prompt"
+        label="Extraction prompt"
+        description="Replaces the extractor's built-in instructions."
+        saved={agent.memoryExtractionPrompt ?? ""}
+        isOwner={isOwner}
+        onSave={(prompt) => onUpdateAgent(agent.id, { memoryExtractionPrompt: prompt })}
+        loadDefault={() => getDefaultMemoryPrompts().then((p) => p.extraction)}
+      />
+    </>
+  )
+}
+
+function MemoryToggle({
+  id,
+  label,
+  description,
+  checked,
+  isOwner,
+  onToggle,
+}: {
+  id: string
+  label: string
+  description: string
+  checked: boolean
+  isOwner: boolean
+  onToggle: (enabled: boolean) => Promise<boolean>
+}) {
+  const [saving, setSaving] = useState(false)
+
+  const toggle = async (enabled: boolean) => {
+    setSaving(true)
+    await onToggle(enabled)
+    setSaving(false)
+  }
+
+  return (
+    <div className="flex items-start gap-3">
+      <Checkbox
+        id={id}
+        className="mt-0.5"
+        checked={checked}
+        disabled={!isOwner || saving}
+        onCheckedChange={(state) => void toggle(state === true)}
+      />
+      <div className="grid gap-1">
+        <Label htmlFor={id}>{label}</Label>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+    </div>
+  )
+}
+
+// Prompt-override editor: empty saves as null, which means "use the built-in
+// prompt"; the copy button pulls that built-in text in as a starting point.
+function MemoryPromptEditor({
+  id,
+  label,
+  description,
+  saved,
+  isOwner,
+  onSave,
+  loadDefault,
+}: {
+  id: string
+  label: string
+  description: string
+  saved: string
+  isOwner: boolean
+  onSave: (prompt: string | null) => Promise<boolean>
+  loadDefault: () => Promise<string>
+}) {
+  const [draft, setDraft] = useState(saved)
+  const [saving, setSaving] = useState(false)
+  const [loadingDefault, setLoadingDefault] = useState(false)
+  const dirty = draft.trim() !== saved.trim()
+
+  const save = async () => {
+    if (!dirty || saving) return
+    setSaving(true)
+    await onSave(draft.trim() || null)
+    setSaving(false)
+  }
+
+  const copyDefault = async () => {
+    setLoadingDefault(true)
+    try {
+      setDraft(await loadDefault())
+    } catch (error) {
+      toast.error("Failed to load the default prompt", {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setLoadingDefault(false)
+    }
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Textarea
+        id={id}
+        value={draft}
+        placeholder="Leave empty to use the built-in prompt."
+        rows={6}
+        disabled={!isOwner}
+        onChange={(e) => setDraft(e.target.value)}
+      />
+      <p className="text-xs text-muted-foreground">
+        {isOwner ? description : "Only the agent's owner can edit this prompt."}
+      </p>
+      {isOwner && (
+        <div className="flex gap-2">
+          <Button variant="outline" disabled={!dirty || saving} onClick={() => void save()}>
+            {saving ? "Saving…" : "Save prompt"}
+          </Button>
+          <Button
+            variant="ghost"
+            disabled={loadingDefault}
+            onClick={() => void copyDefault()}
+          >
+            {loadingDefault ? "Loading…" : "Copy default prompt"}
+          </Button>
+        </div>
       )}
     </div>
   )
