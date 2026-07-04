@@ -711,9 +711,8 @@ export function connectorAuthorizeUrl(connector: ConnectorType): string {
 }
 
 // Per-tool permission level, scoped to one agent:
-// { [connector]: { [tool]: level } }. Missing keys mean "allow". "ask" is
-// stored for the upcoming approval flow; until then the backend withholds
-// those tools like "deny".
+// { [connector]: { [tool]: level } }. Missing keys mean "allow". "ask" pauses
+// the turn on each call and shows an approval prompt in the chat.
 export const TOOL_PERMISSION_LEVELS = ["deny", "ask", "allow"] as const
 export type ToolPermissionLevel = (typeof TOOL_PERMISSION_LEVELS)[number]
 export type ToolPermissions = Partial<
@@ -735,6 +734,32 @@ export function saveToolPermissions(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ agent_id: agentId, permissions }),
   }).then((res) => res.permissions)
+}
+
+// Standing approval overrides: "always approve" decisions from the chat's
+// approval prompts, one row per (connector, tool, target). target "*" covers
+// every call of the tool. Created only by the approval prompt; this API lists
+// and revokes them (Settings → Tools → Approvals).
+const TOOL_APPROVALS_URL = "/agent/tool-approvals"
+
+export type ToolApproval = {
+  id: string
+  connector: ConnectorType
+  tool: string
+  target: string
+  createdAt: string
+}
+
+export function listToolApprovals(agentId: string): Promise<ToolApproval[]> {
+  return request<{ approvals: ToolApproval[] }>(
+    `${TOOL_APPROVALS_URL}?agent_id=${encodeURIComponent(agentId)}`
+  ).then((res) => res.approvals)
+}
+
+export function deleteToolApproval(id: string): Promise<void> {
+  return request<void>(`${TOOL_APPROVALS_URL}?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
 }
 
 // Read-only view of what the background memory extractor did per source

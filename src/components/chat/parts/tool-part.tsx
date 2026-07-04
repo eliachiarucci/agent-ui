@@ -1,5 +1,6 @@
 import { useState } from "react"
 import {
+  Ban,
   BookmarkPlus,
   CheckCircle2,
   ChevronDown,
@@ -22,6 +23,7 @@ import {
 import type { ToolUIPart, DynamicToolUIPart } from "ai"
 import { Button } from "@/components/ui/button"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { ToolApprovalPrompt } from "@/components/chat/parts/tool-approval"
 import { fileToolTarget } from "@/lib/chat-files"
 import { noteToolTarget } from "@/lib/chat-notes"
 import { useFileViewerActions } from "@/lib/file-viewer-context"
@@ -64,8 +66,15 @@ export function ToolPart({ part, toolName }: { part: ToolUIPart | DynamicToolUIP
   const meta = TOOL_META[toolName] ?? { icon: Wrench, running: `Running ${toolName}…`, done: toolName }
   const Icon = meta.icon
 
+  // An "ask"-level call paused for the user's decision (or just answered and
+  // waiting for the resume): the approval prompt replaces the tool chip.
+  if (part.state === "approval-requested" || part.state === "approval-responded") {
+    return <ToolApprovalPrompt part={part} toolName={toolName} />
+  }
+
   const running = part.state === "input-streaming" || part.state === "input-available"
   const failed = part.state === "output-error"
+  const denied = part.state === "output-denied"
   // File-tool calls that completed on a real file get a shortcut into the
   // viewer; note-tool calls one into the note editor popup.
   const viewableFile = viewer ? fileToolTarget(part) : null
@@ -86,10 +95,18 @@ export function ToolPart({ part, toolName }: { part: ToolUIPart | DynamicToolUIP
             <Loader2 className="size-3.5 animate-spin" />
           ) : failed ? (
             <XCircle className="size-3.5" />
+          ) : denied ? (
+            <Ban className="size-3.5" />
           ) : (
             <Icon className="size-3.5" />
           )}
-          {running ? meta.running : failed ? `${toolName} failed` : meta.done}
+          {running
+            ? meta.running
+            : failed
+              ? `${toolName} failed`
+              : denied
+                ? `${toolName} denied`
+                : meta.done}
           {!running && part.state === "output-available" && (
             <CheckCircle2 className="size-3 text-emerald-500" />
           )}

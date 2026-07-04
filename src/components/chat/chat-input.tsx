@@ -23,18 +23,31 @@ type ChatInputProps = {
   // No model is selected (no override, no default) — sending is blocked until
   // the user picks one in the status bar or Settings → Models.
   noModel?: boolean
+  // The turn is paused on an approval prompt: sending is blocked until the
+  // user decides (typing is fine, the draft survives).
+  approvalPending?: boolean
   onSend: (text: string, attachments: PendingAttachment[]) => Promise<void> | void
   onStop: () => void
 }
 
-export function ChatInput({ busy, noModel = false, onSend, onStop }: ChatInputProps) {
+export function ChatInput({
+  busy,
+  noModel = false,
+  approvalPending = false,
+  onSend,
+  onStop,
+}: ChatInputProps) {
   const [value, setValue] = useState("")
   const [attachments, setAttachments] = useState<PendingAttachment[]>([])
   // True only while attachments upload, before the stream sets `busy`.
   const [sending, setSending] = useState(false)
 
   const canSend =
-    (value.trim() !== "" || attachments.length > 0) && !busy && !sending && !noModel
+    (value.trim() !== "" || attachments.length > 0) &&
+    !busy &&
+    !sending &&
+    !noModel &&
+    !approvalPending
 
   const submit = async () => {
     if (!canSend) return
@@ -124,6 +137,11 @@ export function ChatInput({ busy, noModel = false, onSend, onStop }: ChatInputPr
         {noModel && (
           <p className="text-xs text-amber-600 dark:text-amber-500">
             No model selected — pick one in the status bar below or in Settings → Models to start chatting.
+          </p>
+        )}
+        {approvalPending && (
+          <p className="text-xs text-amber-600 dark:text-amber-500">
+            The agent is waiting for your approval above — approve or deny to continue.
           </p>
         )}
       </div>

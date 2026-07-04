@@ -1,5 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useChat, type Chat } from "@ai-sdk/react"
+import { isToolOrDynamicToolUIPart } from "ai"
 import { Brain, Lock, LockOpen } from "lucide-react"
 import { toast } from "sonner"
 import { MessageList } from "@/components/chat/message-list"
@@ -8,7 +9,8 @@ import { StatusBar } from "@/components/chat/status-bar"
 import { EmptyState } from "@/components/chat/empty-state"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import { setChatDataCallback } from "@/lib/chat"
+import { markApprovalAlways, setChatDataCallback } from "@/lib/chat"
+import { ApprovalContext, type ApprovalActions } from "@/lib/approval-context"
 import { useActiveModel } from "@/lib/active-model"
 import { useDefaultModel } from "@/hooks/use-default-model"
 import { formatAttachmentsMarker, uploadFile, type AgentUIMessage } from "@/lib/api"
@@ -91,7 +93,36 @@ export function ChatView({
   headerStart,
   headerEnd,
 }: ChatViewProps) {
-  const { messages, sendMessage, status, error, stop } = useChat({ chat })
+  const { messages, sendMessage, status, error, stop, addToolApprovalResponse } = useChat({
+    chat,
+  })
+
+  // A turn paused on approval prompts: the composer blocks (answering resumes
+  // the same turn; a new message would deny the pending calls) and the prompts
+  // in the message list carry the decision buttons via ApprovalContext.
+  const approvalPending = useMemo(() => {
+    const last = messages[messages.length - 1]
+    return (
+      last?.role === "assistant" &&
+      last.parts.some(
+        (part) => isToolOrDynamicToolUIPart(part) && part.state === "approval-requested"
+      )
+    )
+  }, [messages])
+
+  // Decisions flow through addToolApprovalResponse; once every pending prompt
+  // has one, the chat auto-resends (sendAutomaticallyWhen in lib/chat.ts) and
+  // the backend resumes the turn. "Always" is flagged first so the resume
+  // request carries it and the backend stores the standing override.
+  const approvalActions = useMemo<ApprovalActions>(
+    () => ({
+      respond: (approvalId, approved, always) => {
+        if (approved && always) markApprovalAlways(approvalId)
+        void addToolApprovalResponse({ id: approvalId, approved })
+      },
+    }),
+    [addToolApprovalResponse]
+  )
 
   // The backend compacts long conversations in-band: after the answer streams,
   // it holds the stream open while it summarizes, emitting `data-compaction`
@@ -219,16 +250,24 @@ export function ChatView({
       {isNew ? (
         <EmptyState onSuggestion={send} />
       ) : (
-        <MessageList
-          messages={messages}
-          status={status}
-          error={error}
-          conversationId={chat.id}
-          summarizedThroughId={summarizedThroughId}
-          compacting={compacting}
-        />
+        <ApprovalContext.Provider value={approvalActions}>
+          <MessageList
+            messages={messages}
+            status={status}
+            error={error}
+            conversationId={chat.id}
+            summarizedThroughId={summarizedThroughId}
+            compacting={compacting}
+          />
+        </ApprovalContext.Provider>
       )}
-      <ChatInput busy={busy} noModel={!hasModel} onSend={send} onStop={() => void stop()} />
+      <ChatInput
+        busy={busy}
+        noModel={!hasModel}
+        approvalPending={approvalPending}
+        onSend={send}
+        onStop={() => void stop()}
+      />
       <StatusBar messages={messages} />
     </div>
   )

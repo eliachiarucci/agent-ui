@@ -1,8 +1,27 @@
 import { useEffect, useState } from "react"
-import { Check, ChevronDown, Copy, ExternalLink, Loader2, Mail, TriangleAlert, Unplug } from "lucide-react"
+import {
+  Check,
+  ChevronDown,
+  Copy,
+  ExternalLink,
+  Loader2,
+  Mail,
+  ShieldCheck,
+  Trash2,
+  TriangleAlert,
+  Unplug,
+} from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -18,11 +37,14 @@ import { useConnectors } from "@/hooks/use-connectors"
 import { cn } from "@/lib/utils"
 import {
   connectorAuthorizeUrl,
+  deleteToolApproval,
   getToolPermissions,
+  listToolApprovals,
   saveToolPermissions,
   type Agent,
   type ConnectorInfo,
   type ConnectorType,
+  type ToolApproval,
   type ToolPermissionLevel,
   type ToolPermissions,
 } from "@/lib/api"
@@ -132,6 +154,7 @@ export function ToolsSettings({
           Tool permissions are saved per agent: pick an agent, then choose what its tools may
           do. Connections themselves are yours and shared across agents.
         </p>
+        {agentId && <ApprovalOverridesDialog agentId={agentId} />}
       </div>
 
       <Separator />
@@ -160,6 +183,102 @@ export function ToolsSettings({
         />
       ))}
     </div>
+  )
+}
+
+// Standing "always approve" overrides for the selected agent: created from the
+// chat's approval prompts, listed here so they can be reviewed and revoked.
+function ApprovalOverridesDialog({ agentId }: { agentId: string }) {
+  const [open, setOpen] = useState(false)
+  // Tagged with the agent it was fetched for, like the permissions map above:
+  // switching agents reads as null (loading) without a state reset in the effect.
+  const [fetched, setFetched] = useState<{ key: string; rows: ToolApproval[] } | null>(null)
+  const approvals = fetched && fetched.key === agentId ? fetched.rows : null
+
+  useEffect(() => {
+    if (!open) return
+    let stale = false
+    listToolApprovals(agentId)
+      .then((rows) => {
+        if (!stale) setFetched({ key: agentId, rows })
+      })
+      .catch((error: unknown) => {
+        toast.error("Failed to load approval overrides", {
+          description: error instanceof Error ? error.message : undefined,
+        })
+      })
+    return () => {
+      stale = true
+    }
+  }, [open, agentId])
+
+  const remove = async (id: string) => {
+    const previous = fetched
+    setFetched((cur) => (cur ? { ...cur, rows: cur.rows.filter((r) => r.id !== id) } : cur))
+    try {
+      await deleteToolApproval(id)
+    } catch (error) {
+      setFetched(previous)
+      toast.error("Failed to remove the override", {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="sm" className="w-fit gap-2">
+          <ShieldCheck className="size-4" />
+          Approval overrides
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="max-h-[80vh] gap-4 overflow-y-auto sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Approval overrides</DialogTitle>
+          <DialogDescription>
+            Combinations you chose to "always approve" from the chat's approval prompts. The
+            agent runs matching calls without asking; remove one to be asked again.
+          </DialogDescription>
+        </DialogHeader>
+        {approvals === null ? (
+          <Skeleton className="h-24 w-full" />
+        ) : approvals.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No overrides yet. When a tool set to "Ask" requests approval in a chat, choosing
+            "Always allow" saves it here.
+          </p>
+        ) : (
+          <div className="rounded-md border">
+            {approvals.map((approval, i) => (
+              <div
+                key={approval.id}
+                className={cn("flex items-center gap-3 p-2.5", i > 0 && "border-t")}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-mono text-xs">{approval.tool}</p>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {approval.target === "*" ? "Any call" : approval.target}
+                  </p>
+                </div>
+                <Badge variant="secondary" className="shrink-0 text-xs">
+                  {approval.connector}
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                  aria-label={`Remove override for ${approval.tool}`}
+                  onClick={() => void remove(approval.id)}
+                >
+                  <Trash2 className="size-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -452,8 +571,9 @@ function ConnectedSection({
         {agentSelected ? (
           <p className="text-xs text-muted-foreground">
             What the selected agent may do with {info.name}. Changes apply from the next
-            message. "Ask" will request your confirmation per call once approval support lands —
-            until then those tools stay unavailable.
+            message. "Ask" pauses the chat on each call so you can approve it, always approve
+            that tool + target combination, or deny it. Recurring jobs run unattended, so
+            "Ask" tools stay unavailable there.
           </p>
         ) : (
           <p className="text-xs text-amber-600 dark:text-amber-500">
