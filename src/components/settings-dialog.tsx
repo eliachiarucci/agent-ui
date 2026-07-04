@@ -142,7 +142,7 @@ export function SettingsDialog({
             ) : tab === "models" ? (
               <ModelsSettings />
             ) : tab === "tools" ? (
-              <ToolsSettings />
+              <ToolsSettings agents={agents} activeAgentId={activeAgentId} />
             ) : tab === "account" ? (
               <AccountSettings />
             ) : (

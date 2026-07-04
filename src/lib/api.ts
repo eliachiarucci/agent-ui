@@ -710,29 +710,30 @@ export function connectorAuthorizeUrl(connector: ConnectorType): string {
   return `${CONNECTORS_URL}/${connector}/authorize`
 }
 
-// Per-tool switches scoped to one chat model: { [connector]: { [tool]: enabled } }.
-// Missing keys mean enabled — only explicit false withholds a tool.
-export type ToolPermissions = Partial<Record<ConnectorType, Record<string, boolean>>>
+// Per-tool permission level, scoped to one agent:
+// { [connector]: { [tool]: level } }. Missing keys mean "allow". "ask" is
+// stored for the upcoming approval flow; until then the backend withholds
+// those tools like "deny".
+export const TOOL_PERMISSION_LEVELS = ["deny", "ask", "allow"] as const
+export type ToolPermissionLevel = (typeof TOOL_PERMISSION_LEVELS)[number]
+export type ToolPermissions = Partial<
+  Record<ConnectorType, Record<string, ToolPermissionLevel>>
+>
 
-export function getToolPermissions(
-  provider: ProviderType,
-  model: string
-): Promise<ToolPermissions> {
-  const params = `provider=${encodeURIComponent(provider)}&model=${encodeURIComponent(model)}`
-  return request<{ permissions: ToolPermissions }>(`${TOOL_PERMISSIONS_URL}?${params}`).then(
-    (res) => res.permissions
-  )
+export function getToolPermissions(agentId: string): Promise<ToolPermissions> {
+  return request<{ permissions: ToolPermissions }>(
+    `${TOOL_PERMISSIONS_URL}?agent_id=${encodeURIComponent(agentId)}`
+  ).then((res) => res.permissions)
 }
 
 export function saveToolPermissions(
-  provider: ProviderType,
-  model: string,
+  agentId: string,
   permissions: ToolPermissions
 ): Promise<ToolPermissions> {
   return request<{ permissions: ToolPermissions }>(TOOL_PERMISSIONS_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ provider, model, permissions }),
+    body: JSON.stringify({ agent_id: agentId, permissions }),
   }).then((res) => res.permissions)
 }
 

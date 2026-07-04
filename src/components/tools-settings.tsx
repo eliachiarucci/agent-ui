@@ -5,19 +5,25 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Switch } from "@/components/ui/switch"
-import { ModelPicker, type ModelSelection } from "@/components/model-picker"
 import { useConnectors } from "@/hooks/use-connectors"
-import { useActiveModel } from "@/lib/active-model"
 import { cn } from "@/lib/utils"
 import {
   connectorAuthorizeUrl,
   getToolPermissions,
   saveToolPermissions,
+  type Agent,
   type ConnectorInfo,
   type ConnectorType,
+  type ToolPermissionLevel,
   type ToolPermissions,
 } from "@/lib/api"
 
@@ -40,26 +46,30 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
-export function ToolsSettings() {
+export function ToolsSettings({
+  agents,
+  activeAgentId,
+}: {
+  agents: Agent[]
+  activeAgentId?: string
+}) {
   const { connectors, loading, save, remove } = useConnectors()
-  // Tool toggles are scoped per chat model; start from the status-bar selection.
-  const active = useActiveModel()
-  const [selection, setSelection] = useState<ModelSelection | null>(active)
+  // Tool permissions are scoped per agent; start from the active one.
+  const [agentId, setAgentId] = useState<string | undefined>(activeAgentId ?? agents[0]?.id)
   const [expanded, setExpanded] = useState<ConnectorType | null>(null)
 
-  // The permission map for the selected model, shared by every connector card.
-  // Tagged with the model it was fetched for: switching models makes the stale
+  // The permission map for the selected agent, shared by every connector card.
+  // Tagged with the agent it was fetched for: switching agents makes the stale
   // map invisible immediately (reads as null → loading) without a state reset.
-  const modelKey = selection ? `${selection.provider}:${selection.model}` : null
   const [fetched, setFetched] = useState<{ key: string; value: ToolPermissions } | null>(null)
-  const permissions = fetched && fetched.key === modelKey ? fetched.value : null
+  const permissions = fetched && fetched.key === agentId ? fetched.value : null
 
   useEffect(() => {
-    if (!selection || !modelKey) return
+    if (!agentId) return
     let stale = false
-    getToolPermissions(selection.provider, selection.model)
+    getToolPermissions(agentId)
       .then((perms) => {
-        if (!stale) setFetched({ key: modelKey, value: perms })
+        if (!stale) setFetched({ key: agentId, value: perms })
       })
       .catch((error: unknown) => {
         toast.error("Failed to load tool permissions", {
@@ -69,20 +79,24 @@ export function ToolsSettings() {
     return () => {
       stale = true
     }
-  }, [selection, modelKey])
+  }, [agentId])
 
-  const toggleTool = async (connector: ConnectorType, tool: string, enabled: boolean) => {
-    if (!selection || !modelKey || permissions === null) return
+  const setToolLevel = async (
+    connector: ConnectorType,
+    tool: string,
+    level: ToolPermissionLevel
+  ) => {
+    if (!agentId || permissions === null) return
     const previous = permissions
     const next: ToolPermissions = {
       ...permissions,
-      [connector]: { ...permissions[connector], [tool]: enabled },
+      [connector]: { ...permissions[connector], [tool]: level },
     }
-    setFetched({ key: modelKey, value: next })
+    setFetched({ key: agentId, value: next })
     try {
-      await saveToolPermissions(selection.provider, selection.model, next)
+      await saveToolPermissions(agentId, next)
     } catch (error) {
-      setFetched({ key: modelKey, value: previous })
+      setFetched({ key: agentId, value: previous })
       toast.error("Failed to save tool permissions", {
         description: error instanceof Error ? error.message : undefined,
       })
@@ -102,16 +116,21 @@ export function ToolsSettings() {
     <div className="grid gap-3">
       <div className="grid gap-2">
         <Label>Configure tools for</Label>
-        <ModelPicker
-          value={selection}
-          onChange={setSelection}
-          menuLabel="Model"
-          emptyLabel="Select a model"
-          clearable={false}
-        />
+        <Select value={agentId} onValueChange={setAgentId}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="Select an agent" />
+          </SelectTrigger>
+          <SelectContent>
+            {agents.map((agent) => (
+              <SelectItem key={agent.id} value={agent.id}>
+                {agent.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         <p className="text-xs text-muted-foreground">
-          Tool permissions are saved per model: pick the model you chat with, then choose which
-          tools it may use. Connections themselves are shared across models.
+          Tool permissions are saved per agent: pick an agent, then choose what its tools may
+          do. Connections themselves are yours and shared across agents.
         </p>
       </div>
 
@@ -133,9 +152,9 @@ export function ToolsSettings() {
           onToggle={() =>
             setExpanded((cur) => (cur === connector.connector ? null : connector.connector))
           }
-          selection={selection}
+          agentSelected={Boolean(agentId)}
           permissions={permissions}
-          onToggleTool={toggleTool}
+          onSetLevel={setToolLevel}
           onSave={save}
           onRemove={remove}
         />
@@ -148,18 +167,22 @@ function ConnectorCard({
   info,
   expanded,
   onToggle,
-  selection,
+  agentSelected,
   permissions,
-  onToggleTool,
+  onSetLevel,
   onSave,
   onRemove,
 }: {
   info: ConnectorInfo
   expanded: boolean
   onToggle: () => void
-  selection: ModelSelection | null
+  agentSelected: boolean
   permissions: ToolPermissions | null
-  onToggleTool: (connector: ConnectorType, tool: string, enabled: boolean) => Promise<void>
+  onSetLevel: (
+    connector: ConnectorType,
+    tool: string,
+    level: ToolPermissionLevel
+  ) => Promise<void>
   onSave: (
     connector: ConnectorType,
     input: { clientId: string; clientSecret?: string }
@@ -222,9 +245,9 @@ function ConnectorCard({
           {connected ? (
             <ConnectedSection
               info={info}
-              selection={selection}
+              agentSelected={agentSelected}
               permissions={permissions}
-              onToggleTool={onToggleTool}
+              onSetLevel={onSetLevel}
               onRemove={onRemove}
             />
           ) : (
@@ -314,9 +337,18 @@ function SetupWizard({
             <WizardLink href="https://console.cloud.google.com/auth/branding">
               auth branding
             </WizardLink>
-            ): pick <span className="font-medium">External</span> and add yourself as a test
-            user — or <span className="font-medium">Internal</span> if you're on Google
-            Workspace (no weekly re-consent).
+            ): pick <span className="font-medium">External</span> — or{" "}
+            <span className="font-medium">Internal</span> if you're on Google Workspace (no
+            weekly re-consent, skip the next step).
+          </li>
+          <li>
+            Add the <span className="font-medium">exact Google account you'll connect</span> as
+            a test user (
+            <WizardLink href="https://console.cloud.google.com/auth/audience">
+              audience
+            </WizardLink>{" "}
+            → Test users). Required: without it Google blocks the consent with{" "}
+            <span className="font-medium">error 403: access_denied</span>.
           </li>
           <li>
             Create an OAuth client (
@@ -328,7 +360,11 @@ function SetupWizard({
           </li>
         </ol>
         <CopyField value={info.redirectUri} />
-        <p>Then paste the client ID and secret below.</p>
+        <p>
+          Then paste the client ID and secret below. When you connect, Google will warn that it
+          "hasn't verified this app" — expected while the app is in testing: click{" "}
+          <span className="font-medium">Continue</span>.
+        </p>
       </div>
 
       <div className="grid gap-2">
@@ -384,19 +420,23 @@ function SetupWizard({
   )
 }
 
-// Connected state: account line, per-tool permission switches for the selected
-// model (grouped read/write, like Claude's connector settings), disconnect.
+// Connected state: account line, per-tool permission levels for the selected
+// agent (grouped read/write, like Claude's connector settings), disconnect.
 function ConnectedSection({
   info,
-  selection,
+  agentSelected,
   permissions,
-  onToggleTool,
+  onSetLevel,
   onRemove,
 }: {
   info: ConnectorInfo
-  selection: ModelSelection | null
+  agentSelected: boolean
   permissions: ToolPermissions | null
-  onToggleTool: (connector: ConnectorType, tool: string, enabled: boolean) => Promise<void>
+  onSetLevel: (
+    connector: ConnectorType,
+    tool: string,
+    level: ToolPermissionLevel
+  ) => Promise<void>
   onRemove: (connector: ConnectorType) => Promise<boolean>
 }) {
   const [removing, setRemoving] = useState(false)
@@ -409,23 +449,23 @@ function ConnectedSection({
     <>
       <div className="grid gap-1">
         <p className="text-sm font-medium">Permissions</p>
-        {selection ? (
+        {agentSelected ? (
           <p className="text-xs text-muted-foreground">
-            Which {info.name} tools{" "}
-            <span className="font-medium text-foreground">{selection.model}</span> may use.
-            Changes apply from the next message.
+            What the selected agent may do with {info.name}. Changes apply from the next
+            message. "Ask" will request your confirmation per call once approval support lands —
+            until then those tools stay unavailable.
           </p>
         ) : (
           <p className="text-xs text-amber-600 dark:text-amber-500">
-            Select a model at the top of this tab to configure its tool permissions.
+            Select an agent at the top of this tab to configure its tool permissions.
           </p>
         )}
       </div>
 
-      {selection && permissions === null ? (
+      {agentSelected && permissions === null ? (
         <Skeleton className="h-24 w-full" />
       ) : (
-        selection &&
+        agentSelected &&
         permissions !== null &&
         groups.map(({ kind, label }) => {
           const tools = info.tools.filter((t) => t.kind === kind)
@@ -448,12 +488,10 @@ function ConnectedSection({
                       <p className="font-mono text-xs">{tool.name}</p>
                       <p className="text-xs text-muted-foreground">{tool.description}</p>
                     </div>
-                    <Switch
-                      checked={permissions[info.connector]?.[tool.name] !== false}
-                      onCheckedChange={(checked) =>
-                        void onToggleTool(info.connector, tool.name, checked)
-                      }
-                      aria-label={`Allow ${tool.name}`}
+                    <LevelControl
+                      label={`Permission for ${tool.name}`}
+                      value={permissions[info.connector]?.[tool.name] ?? "allow"}
+                      onChange={(level) => void onSetLevel(info.connector, tool.name, level)}
                     />
                   </div>
                 ))}
@@ -478,6 +516,45 @@ function ConnectedSection({
         </Button>
       </div>
     </>
+  )
+}
+
+// Segmented three-way control, in escalating order of access: deny, ask, allow.
+const LEVELS: Array<{ id: ToolPermissionLevel; label: string }> = [
+  { id: "deny", label: "Deny" },
+  { id: "ask", label: "Ask" },
+  { id: "allow", label: "Allow" },
+]
+
+function LevelControl({
+  value,
+  onChange,
+  label,
+}: {
+  value: ToolPermissionLevel
+  onChange: (level: ToolPermissionLevel) => void
+  label: string
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex shrink-0 rounded-md border p-0.5">
+      {LEVELS.map((level) => (
+        <button
+          key={level.id}
+          type="button"
+          role="radio"
+          aria-checked={value === level.id}
+          className={cn(
+            "rounded px-2 py-1 text-xs transition-colors",
+            value === level.id
+              ? "bg-accent font-medium text-accent-foreground"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+          onClick={() => onChange(level.id)}
+        >
+          {level.label}
+        </button>
+      ))}
+    </div>
   )
 }
 
