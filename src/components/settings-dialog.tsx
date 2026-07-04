@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Bot, Boxes, Info, Plus, Trash2, UserRound, Wrench } from "lucide-react"
+import { Bot, Boxes, Download, Info, Plus, Trash2, UserRound, Wrench } from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -31,7 +31,12 @@ import { ModelsSettings } from "@/components/models-settings"
 import { ToolsSettings } from "@/components/tools-settings"
 import { ModelPicker } from "@/components/model-picker"
 import { cn } from "@/lib/utils"
-import { getDefaultMemoryPrompts, type Agent, type ProviderType } from "@/lib/api"
+import {
+  downloadBackup,
+  getDefaultMemoryPrompts,
+  type Agent,
+  type ProviderType,
+} from "@/lib/api"
 
 type SettingsDialogProps = {
   open: boolean
@@ -160,6 +165,21 @@ export function SettingsDialog({
 const APP_VERSION: string = import.meta.env.VITE_APP_VERSION ?? "dev"
 
 function GeneralTab() {
+  const [downloading, setDownloading] = useState(false)
+
+  const download = async () => {
+    setDownloading(true)
+    try {
+      await downloadBackup()
+    } catch (error) {
+      toast.error("Backup failed", {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
     <div className="grid gap-4">
       <div className="grid gap-2">
@@ -168,6 +188,28 @@ function GeneralTab() {
           <span className="text-sm text-muted-foreground">Version</span>
           <span className="font-mono text-sm">{APP_VERSION}</span>
         </div>
+      </div>
+
+      <Separator />
+
+      <div className="grid gap-2">
+        <Label>Backup</Label>
+        <p className="text-xs text-muted-foreground">
+          Download a snapshot of this server's entire database: every user's account,
+          agents, memories, conversations, and settings — including stored provider
+          keys and connector tokens, so keep it somewhere safe. Files created by
+          agents are stored on disk and not included. Restore with{" "}
+          <code className="font-mono">pg_restore</code>; see the install docs.
+        </p>
+        <Button
+          variant="outline"
+          className="justify-self-start gap-2"
+          disabled={downloading}
+          onClick={() => void download()}
+        >
+          <Download className="size-4" />
+          {downloading ? "Preparing backup…" : "Download backup"}
+        </Button>
       </div>
     </div>
   )

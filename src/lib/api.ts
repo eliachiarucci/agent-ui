@@ -14,6 +14,7 @@ const NOTES_URL = "/agent/notes"
 const MEMORY_CONVERSATIONS_URL = "/agent/memory-conversations"
 const MEMORY_PROMPT_URL = "/agent/memory-prompt"
 const JOBS_URL = "/agent/jobs"
+const BACKUP_URL = "/agent/backup"
 const JOB_RUNS_URL = "/agent/jobs/runs"
 
 // The backend attaches per-step token usage to assistant messages (see
@@ -375,6 +376,32 @@ export function uploadFile(params: {
       body: content,
     }
   )
+}
+
+// Fetched (not a plain anchor) so a failure — pg_dump missing, version
+// mismatch — surfaces as a thrown error for a toast instead of the browser
+// saving the JSON error body as a broken backup file.
+export async function downloadBackup(): Promise<void> {
+  const res = await fetch(BACKUP_URL)
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    let message = body
+    try {
+      const parsed = JSON.parse(body) as { error?: unknown }
+      if (typeof parsed.error === "string") message = parsed.error
+    } catch {
+      /* not JSON */
+    }
+    throw new Error(message || `Request failed (${res.status}): ${res.statusText}`)
+  }
+  const disposition = res.headers.get("content-disposition") ?? ""
+  const name = /filename="([^"]+)"/.exec(disposition)?.[1] ?? "agent-backup.dump"
+  const url = URL.createObjectURL(await res.blob())
+  const link = document.createElement("a")
+  link.href = url
+  link.download = name
+  link.click()
+  URL.revokeObjectURL(url)
 }
 
 // Plain href, no fetch: the browser handles the attachment download itself.
