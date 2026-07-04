@@ -55,7 +55,7 @@ export function ToolApprovalPrompt({
         ) : (
           <>
             <Ban className="size-3.5" />
-            Denied — telling the agent…
+            Denied
           </>
         )}
       </div>
