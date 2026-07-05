@@ -53,7 +53,15 @@ export default function App() {
 
 function Workspace() {
   const { data: session } = authClient.useSession()
-  const { agents, activeAgentId, selectAgent, create, update, remove: removeAgent } = useAgents()
+  const {
+    agents,
+    activeAgentId,
+    selectAgent,
+    create,
+    update,
+    remove: removeAgent,
+    refresh: refreshAgents,
+  } = useAgents()
   const { conversations, loading, refresh, add, remove } = useConversations(activeAgentId)
   // New chats get a client-generated id; the backend creates the row on first message.
   const [activeId, setActiveId] = useState<string>(() => randomUUID())
@@ -408,6 +416,7 @@ function Workspace() {
         onCreateAgent={handleCreateAgent}
         onUpdateAgent={update}
         onDeleteAgent={handleDeleteAgent}
+        onRefreshAgents={() => void refreshAgents()}
       />
     </div>
   )

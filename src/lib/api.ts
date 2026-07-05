@@ -12,6 +12,7 @@ const PROVIDER_TEST_URL = "/agent/provider-test"
 const SETTINGS_URL = "/agent/settings"
 const NOTES_URL = "/agent/notes"
 const MEMORY_CONVERSATIONS_URL = "/agent/memory-conversations"
+const MEMORY_POOLS_URL = "/agent/memory-pools"
 const MEMORY_PROMPT_URL = "/agent/memory-prompt"
 const JOBS_URL = "/agent/jobs"
 const BACKUP_URL = "/agent/backup"
@@ -65,6 +66,9 @@ export type Agent = {
   name: string
   // Owner-written instructions appended to the backend's system prompt.
   systemPrompt: string | null
+  // The memory pool this agent reads/writes. null = no memory (no recall,
+  // no memory tools, no background extraction) until a pool is attached.
+  memoryPoolId: string | null
   // Model the background memory extractor runs on (owner-picked). null pair →
   // the backend's env-configured default model.
   memoryProvider: ProviderType | null
@@ -104,6 +108,19 @@ export type Memory = {
   pinned: boolean
   createdAt: string
   lastAccessedAt: string
+}
+
+// A named memory store. Pools are decoupled from agents: one pool can back
+// several agents (they share every memory), and an agent without a pool has
+// its memory off. Owned by the creating user.
+export type MemoryPool = {
+  id: string
+  ownerId: string
+  name: string
+  createdAt: string
+  memoryCount: number
+  // Agents currently attached to (reading/writing) this pool.
+  agents: Array<{ id: string; name: string }>
 }
 
 // Prefix of the machine-inserted text part that lists files the user attached
@@ -237,6 +254,8 @@ export function updateAgent(
   changes: {
     name?: string
     systemPrompt?: string | null
+    // null detaches the pool (memory off for this agent).
+    memoryPoolId?: string | null
     // Sent together (both null resets to the env default model).
     memoryProvider?: ProviderType | null
     memoryModel?: string | null
@@ -255,6 +274,7 @@ export function updateAgent(
       id,
       ...(changes.name !== undefined && { name: changes.name }),
       ...(changes.systemPrompt !== undefined && { system_prompt: changes.systemPrompt }),
+      ...(changes.memoryPoolId !== undefined && { memory_pool_id: changes.memoryPoolId }),
       ...(changes.memoryProvider !== undefined && { memory_provider: changes.memoryProvider }),
       ...(changes.memoryModel !== undefined && { memory_model: changes.memoryModel }),
       ...(changes.chatMemoryEnabled !== undefined && {
@@ -306,10 +326,17 @@ export function deleteConversation(id: string): Promise<void> {
   return request<void>(`${CONVERSATIONS_URL}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
 }
 
-export function listMemories(params?: { q?: string; limit?: number }): Promise<Memory[]> {
+// Without poolId the backend scopes to the default agent's attached pool;
+// with it, to that pool directly (Settings → Memory).
+export function listMemories(params?: {
+  q?: string
+  limit?: number
+  poolId?: string
+}): Promise<Memory[]> {
   const search = new URLSearchParams()
   if (params?.q) search.set("q", params.q)
   if (params?.limit) search.set("limit", String(params.limit))
+  if (params?.poolId) search.set("pool_id", params.poolId)
   const qs = search.toString()
   return request<Memory[]>(qs ? `${MEMORIES_URL}?${qs}` : MEMORIES_URL)
 }
@@ -321,24 +348,52 @@ export type MemoryInput = {
   pinned: boolean
 }
 
-export function createMemory(input: MemoryInput): Promise<Memory> {
+export function createMemory(input: MemoryInput, poolId?: string): Promise<Memory> {
   return request<Memory>(MEMORIES_URL, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, ...(poolId && { pool_id: poolId }) }),
   })
 }
 
-export function updateMemory(id: string, input: Partial<MemoryInput>): Promise<Memory> {
+export function updateMemory(
+  id: string,
+  input: Partial<MemoryInput>,
+  poolId?: string
+): Promise<Memory> {
   return request<Memory>(MEMORIES_URL, {
     method: "PATCH",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ id, ...input }),
+    body: JSON.stringify({ id, ...input, ...(poolId && { pool_id: poolId }) }),
   })
 }
 
-export function deleteMemory(id: string): Promise<void> {
-  return request<void>(`${MEMORIES_URL}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+export function deleteMemory(id: string, poolId?: string): Promise<void> {
+  const search = new URLSearchParams({ id })
+  if (poolId) search.set("pool_id", poolId)
+  return request<void>(`${MEMORIES_URL}?${search.toString()}`, { method: "DELETE" })
+}
+
+// ── Memory pools ────────────────────────────────────────────────────────────
+
+export function listMemoryPools(): Promise<MemoryPool[]> {
+  return request<MemoryPool[]>(MEMORY_POOLS_URL)
+}
+
+export function createMemoryPool(name: string): Promise<MemoryPool> {
+  return request<MemoryPool>(MEMORY_POOLS_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name }),
+  })
+}
+
+// Permanently deletes the pool and every memory in it; agents using it are
+// detached (their memory turns off until another pool is attached).
+export function deleteMemoryPool(id: string): Promise<void> {
+  return request<void>(`${MEMORY_POOLS_URL}?id=${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
 }
 
 // ── Files ───────────────────────────────────────────────────────────────────
@@ -685,11 +740,13 @@ export type ConnectorType = "gmail"
 export type ConnectorStatus = "disconnected" | "connected" | "error"
 
 // One tool of a connector, as listed in the backend's catalog. `kind` groups
-// the permission toggles (read vs write).
+// the permission toggles (read vs write); `defaultLevel` is the effective
+// level when the user never saved one ("allow" for reads, "ask" for writes).
 export type ConnectorToolInfo = {
   name: string
   kind: "read" | "write"
   description: string
+  defaultLevel: ToolPermissionLevel
 }
 
 // Catalog entry merged with the user's stored configuration. The client secret

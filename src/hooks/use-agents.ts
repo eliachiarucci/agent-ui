@@ -45,6 +45,17 @@ export function useAgents() {
     }
   }, [])
 
+  /** Re-fetches the agent list (e.g. after a memory-pool deletion detaches agents). */
+  const refresh = useCallback(async () => {
+    try {
+      setAgents(await listAgents())
+    } catch (error) {
+      toast.error("Failed to load agents", {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    }
+  }, [])
+
   const selectAgent = useCallback((id: string) => {
     setActiveAgentId(id)
     localStorage.setItem(ACTIVE_AGENT_KEY, id)
@@ -75,6 +86,7 @@ export function useAgents() {
       changes: {
         name?: string
         systemPrompt?: string | null
+        memoryPoolId?: string | null
         memoryProvider?: ProviderType | null
         memoryModel?: string | null
         chatMemoryEnabled?: boolean
@@ -129,5 +141,5 @@ export function useAgents() {
 
   const activeAgent = agents.find((a) => a.id === activeAgentId)
 
-  return { agents, activeAgent, activeAgentId, selectAgent, create, update, remove }
+  return { agents, activeAgent, activeAgentId, selectAgent, create, update, remove, refresh }
 }

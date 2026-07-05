@@ -610,7 +610,7 @@ function ConnectedSection({
                     </div>
                     <LevelControl
                       label={`Permission for ${tool.name}`}
-                      value={permissions[info.connector]?.[tool.name] ?? "allow"}
+                      value={permissions[info.connector]?.[tool.name] ?? tool.defaultLevel}
                       onChange={(level) => void onSetLevel(info.connector, tool.name, level)}
                     />
                   </div>

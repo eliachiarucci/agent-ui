@@ -39,12 +39,21 @@ import type {
 type MemoryDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  // Browse a specific memory pool (Settings → Memory) instead of the default
+  // agent's attached pool. Pool mode hides the extractor's conversation log,
+  // which is agent-scoped, not pool-scoped.
+  poolId?: string
+  // Shown under the title in pool mode.
+  poolName?: string
 }
 
 type View = "memories" | "conversations" | "conversation"
 
-export function MemoryDialog({ open, onOpenChange }: MemoryDialogProps) {
-  const { memories, loading, query, setQuery, create, update, remove } = useMemories(open)
+export function MemoryDialog({ open, onOpenChange, poolId, poolName }: MemoryDialogProps) {
+  const { memories, loading, query, setQuery, create, update, remove } = useMemories(
+    open,
+    poolId
+  )
   const [editing, setEditing] = useState<Memory | null>(null)
   const [creating, setCreating] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<Memory | null>(null)
@@ -127,10 +136,12 @@ export function MemoryDialog({ open, onOpenChange }: MemoryDialogProps) {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <Brain className="size-5" />
-                  Memories
+                  {poolName ? `Memories — ${poolName}` : "Memories"}
                 </DialogTitle>
                 <DialogDescription>
-                  Everything the agent remembers about you. Edit anything by hand.
+                  {poolId
+                    ? "Everything stored in this memory pool. Edit anything by hand."
+                    : "Everything the agent remembers about you. Edit anything by hand."}
                 </DialogDescription>
               </DialogHeader>
 
@@ -150,15 +161,17 @@ export function MemoryDialog({ open, onOpenChange }: MemoryDialogProps) {
                 </Button>
               </div>
 
-              <Button
-                variant="outline"
-                size="sm"
-                className="justify-start gap-2"
-                onClick={() => setView("conversations")}
-              >
-                <MessagesSquare className="size-4" />
-                View memory conversations
-              </Button>
+              {!poolId && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="justify-start gap-2"
+                  onClick={() => setView("conversations")}
+                >
+                  <MessagesSquare className="size-4" />
+                  View memory conversations
+                </Button>
+              )}
 
               {categories.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">

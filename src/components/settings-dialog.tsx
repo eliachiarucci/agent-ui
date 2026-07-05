@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Bot, Boxes, Download, Info, Plus, Trash2, UserRound, Wrench } from "lucide-react"
+import { Bot, Boxes, Brain, Download, Info, Plus, Trash2, UserRound, Wrench } from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -25,8 +25,16 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { AgentSwitcher } from "@/components/agent-switcher"
 import { AccountSettings } from "@/components/auth/account-settings"
+import { MemoryPoolsSettings } from "@/components/memory-pools-settings"
 import { ModelsSettings } from "@/components/models-settings"
 import { ToolsSettings } from "@/components/tools-settings"
 import { ModelPicker } from "@/components/model-picker"
@@ -34,7 +42,9 @@ import { cn } from "@/lib/utils"
 import {
   downloadBackup,
   getDefaultMemoryPrompts,
+  listMemoryPools,
   type Agent,
+  type MemoryPool,
   type ProviderType,
 } from "@/lib/api"
 
@@ -51,6 +61,7 @@ type SettingsDialogProps = {
     id: string,
     changes: {
       systemPrompt?: string | null
+      memoryPoolId?: string | null
       memoryProvider?: ProviderType | null
       memoryModel?: string | null
       chatMemoryEnabled?: boolean
@@ -59,8 +70,10 @@ type SettingsDialogProps = {
       memoryExtractionPrompt?: string | null
     }
   ) => Promise<boolean>
-  // Owner-only; deletes the agent with all its memories and conversations.
+  // Owner-only; deletes the agent and its conversations (its memory pool survives).
   onDeleteAgent: (id: string) => Promise<boolean>
+  // Re-fetches the agent list (pool deletions detach agents server-side).
+  onRefreshAgents: () => void
   // When set, opening the dialog lands on this tab instead of the default
   // (used by the OAuth callback landing to jump straight to Tools).
   initialTab?: SettingsTabId
@@ -68,6 +81,7 @@ type SettingsDialogProps = {
 
 const TABS = [
   { id: "agent", label: "Agent", icon: Bot },
+  { id: "memory", label: "Memory", icon: Brain },
   { id: "models", label: "Models", icon: Boxes },
   { id: "tools", label: "Tools", icon: Wrench },
   { id: "account", label: "Account", icon: UserRound },
@@ -86,6 +100,7 @@ export function SettingsDialog({
   onCreateAgent,
   onUpdateAgent,
   onDeleteAgent,
+  onRefreshAgents,
   initialTab,
 }: SettingsDialogProps) {
   const [tab, setTab] = useState<TabId>("agent")
@@ -144,6 +159,8 @@ export function SettingsDialog({
                 onUpdateAgent={onUpdateAgent}
                 onDeleteAgent={onDeleteAgent}
               />
+            ) : tab === "memory" ? (
+              <MemoryPoolsSettings onPoolsChanged={onRefreshAgents} />
             ) : tab === "models" ? (
               <ModelsSettings />
             ) : tab === "tools" ? (
@@ -255,8 +272,8 @@ function AgentTab({
           className="w-full"
         />
         <p className="text-xs text-muted-foreground">
-          Each agent has its own conversations and memories. Agents shared with you give
-          every member access to the same memory.
+          Each agent has its own conversations and a memory pool it reads and writes.
+          Agents shared with you give every member access to the same memory.
         </p>
       </div>
 
@@ -269,6 +286,8 @@ function AgentTab({
             agent={activeAgent}
             onUpdateAgent={onUpdateAgent}
           />
+          <Separator />
+          <MemoryPoolEditor agent={activeAgent} onUpdateAgent={onUpdateAgent} />
           <Separator />
           <MemoryModelEditor agent={activeAgent} onUpdateAgent={onUpdateAgent} />
           <MemorySettings agent={activeAgent} onUpdateAgent={onUpdateAgent} />
@@ -347,7 +366,7 @@ function DeleteAgentSection({
           ? "Only the agent's owner can delete it."
           : lastAgent
             ? "You can't delete your only agent."
-            : "Permanently deletes this agent with all of its memories and conversations, for every member."}
+            : "Permanently deletes this agent and all of its conversations, for every member. Its memory pool is kept — manage it in Settings → Memory."}
       </p>
       <AlertDialog>
         <AlertDialogTrigger asChild>
@@ -364,8 +383,9 @@ function DeleteAgentSection({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete “{agent.name}”?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently deletes the agent along with all of its memories and
-              conversations, for every member. This cannot be undone.
+              This permanently deletes the agent along with all of its conversations,
+              for every member. Its memory pool survives and can be deleted in
+              Settings → Memory. This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -624,6 +644,85 @@ function MemoryPromptEditor({
           </Button>
         </div>
       )}
+    </div>
+  )
+}
+
+// Sentinel for the "no pool" choice — Radix Select can't use "" as an item value.
+const NO_POOL = "none"
+
+// Owner-only picker for the memory pool this agent reads and writes. Pools are
+// managed in Settings → Memory; "No memory pool" detaches the agent (memory
+// off). Only the caller's own pools are offered — the backend enforces the same.
+function MemoryPoolEditor({
+  agent,
+  onUpdateAgent,
+}: {
+  agent: Agent
+  onUpdateAgent: SettingsDialogProps["onUpdateAgent"]
+}) {
+  const isOwner = agent.role === "owner"
+  const [pools, setPools] = useState<MemoryPool[]>([])
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void listMemoryPools()
+      .then((list) => {
+        if (!cancelled) setPools(list)
+      })
+      .catch((error: unknown) => {
+        toast.error("Failed to load memory pools", {
+          description: error instanceof Error ? error.message : undefined,
+        })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // A pool owned by someone else (possible on shared agents) still renders,
+  // as a lone disabled-looking entry, so the selection isn't misreported.
+  const attachedUnknown =
+    agent.memoryPoolId && !pools.some((p) => p.id === agent.memoryPoolId)
+
+  const choose = async (value: string) => {
+    const next = value === NO_POOL ? null : value
+    if (next === agent.memoryPoolId) return
+    setSaving(true)
+    await onUpdateAgent(agent.id, { memoryPoolId: next })
+    setSaving(false)
+  }
+
+  return (
+    <div className="grid gap-2">
+      <Label htmlFor="agent-memory-pool">Memory pool</Label>
+      <Select
+        value={agent.memoryPoolId ?? NO_POOL}
+        disabled={!isOwner || saving}
+        onValueChange={(value) => void choose(value)}
+      >
+        <SelectTrigger id="agent-memory-pool" className="w-full">
+          <Brain className="size-4 shrink-0 text-muted-foreground" />
+          <SelectValue placeholder="Select a memory pool" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_POOL}>No memory pool (memory off)</SelectItem>
+          {pools.map((pool) => (
+            <SelectItem key={pool.id} value={pool.id}>
+              {pool.name}
+            </SelectItem>
+          ))}
+          {attachedUnknown && (
+            <SelectItem value={agent.memoryPoolId!}>Another member's pool</SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+      <p className="text-xs text-muted-foreground">
+        {isOwner
+          ? "Where this agent stores and recalls memories. Agents attached to the same pool share every memory. Manage pools in Settings → Memory."
+          : "Only the agent's owner can change its memory pool."}
+      </p>
     </div>
   )
 }
