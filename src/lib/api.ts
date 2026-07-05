@@ -53,6 +53,9 @@ export type Conversation = {
   // Whether the agent's memory applies to this conversation (recall + saving).
   // Like `shared`, fixed server-side at creation.
   memory: boolean
+  // Archived conversations are hidden from the default sidebar list but keep
+  // everything else (still openable and searchable). Creator-toggled.
+  archived: boolean
   messages: StoredMessage[]
   compaction?: CompactionState | null
   createdAt: string
@@ -217,11 +220,14 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   return res.status === 204 ? (undefined as T) : res.json()
 }
 
-export function listConversations(agentId?: string): Promise<Conversation[]> {
-  const url = agentId
-    ? `${CONVERSATIONS_URL}?agent_id=${encodeURIComponent(agentId)}`
-    : CONVERSATIONS_URL
-  return request<Conversation[]>(url)
+// The backend excludes archived conversations by default; archived=true
+// returns only the archived ones (the sidebar's "Archived" view).
+export function listConversations(agentId?: string, archived?: boolean): Promise<Conversation[]> {
+  const params = new URLSearchParams()
+  if (agentId) params.set("agent_id", agentId)
+  if (archived !== undefined) params.set("archived", String(archived))
+  const query = params.toString()
+  return request<Conversation[]>(query ? `${CONVERSATIONS_URL}?${query}` : CONVERSATIONS_URL)
 }
 
 // Single conversation by id (the backend's list route filters on id). Used to
@@ -324,6 +330,15 @@ export function getContextWindow(target?: {
 
 export function deleteConversation(id: string): Promise<void> {
   return request<void>(`${CONVERSATIONS_URL}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+// Creator-only, reversible: archived chats disappear from the default list.
+export function setConversationArchived(id: string, archived: boolean): Promise<Conversation> {
+  return request<Conversation>(CONVERSATIONS_URL, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, archived }),
+  })
 }
 
 // Without poolId the backend scopes to the default agent's attached pool;
@@ -562,9 +577,16 @@ export type CronJob = {
   // Paused jobs stay in the list but the scheduler skips them; manual triggers
   // still run. Resuming recomputes nextRunAt so no missed slot fires a backlog.
   paused: boolean
+  // What runs do with connector tools set to "ask": withhold them like "deny"
+  // (default — nobody is there to approve) or run them unattended. Only
+  // applies while the job runs; chatting in the run's conversation is a
+  // normal interactive turn with the agent's regular permissions.
+  askPolicy: CronAskPolicy
   nextRunAt: string
   createdAt: string
 }
+
+export type CronAskPolicy = "deny" | "allow"
 
 export type CronJobInput = {
   agentId: string
@@ -576,11 +598,14 @@ export type CronJobInput = {
   recurrence: CronRecurrence
   provider?: ProviderType
   model?: string
+  askPolicy?: CronAskPolicy
 }
 
 // PATCH payload: omitted fields keep their value; provider: null returns the
 // job to the backend's default model; title: null lets the agent regenerate.
 export type CronJobUpdate = {
+  // Move the job to another agent the creator is a member of.
+  agentId?: string
   title?: string | null
   prompt?: string
   daysOfWeek?: number[]
@@ -590,6 +615,7 @@ export type CronJobUpdate = {
   paused?: boolean
   provider?: ProviderType | null
   model?: string | null
+  askPolicy?: CronAskPolicy
 }
 
 // A finished run; carries its job's prompt and agent name so the history list
@@ -630,6 +656,7 @@ export function createCronJob(input: CronJobInput): Promise<CronJob> {
       // computes the absolute run instants from it.
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       ...(input.provider ? { provider: input.provider, model: input.model } : {}),
+      ...(input.askPolicy ? { ask_policy: input.askPolicy } : {}),
     }),
   })
 }
@@ -654,6 +681,7 @@ export function updateCronJob(id: string, input: CronJobUpdate): Promise<CronJob
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       id,
+      ...(input.agentId !== undefined && { agent_id: input.agentId }),
       ...(input.title !== undefined && { title: input.title }),
       ...(input.prompt !== undefined && { prompt: input.prompt }),
       ...(input.daysOfWeek !== undefined && { days_of_week: input.daysOfWeek }),
@@ -662,6 +690,7 @@ export function updateCronJob(id: string, input: CronJobUpdate): Promise<CronJob
       ...(input.paused !== undefined && { paused: input.paused }),
       ...(reschedules && { timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
       ...(input.provider !== undefined && { provider: input.provider, model: input.model ?? null }),
+      ...(input.askPolicy !== undefined && { ask_policy: input.askPolicy }),
     }),
   })
 }

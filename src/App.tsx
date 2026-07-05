@@ -62,7 +62,8 @@ function Workspace() {
     remove: removeAgent,
     refresh: refreshAgents,
   } = useAgents()
-  const { conversations, loading, refresh, add, remove } = useConversations(activeAgentId)
+  const { conversations, loading, refresh, add, remove, archive, showArchived, setShowArchived } =
+    useConversations(activeAgentId)
   // New chats get a client-generated id; the backend creates the row on first message.
   const [activeId, setActiveId] = useState<string>(() => randomUUID())
   // Private/shared and memory choices for the next conversation; both fixed
@@ -213,6 +214,7 @@ function Workspace() {
       userId: session?.user.id ?? "",
       shared: newChatShared,
       memory: newChatMemory,
+      archived: false,
       messages: [{ role: "user", content: text }],
       createdAt: now,
       updatedAt: now,
@@ -310,6 +312,9 @@ function Workspace() {
         onSelect={handleSelect}
         onNewChat={() => handleSelect(randomUUID())}
         onDelete={handleDelete}
+        onArchive={(id, archived) => void archive(id, archived)}
+        showArchived={showArchived}
+        onToggleArchived={() => setShowArchived((v) => !v)}
         onOpenMemories={() => setMemoriesOpen(true)}
         onOpenFiles={() => setFilesOpen(true)}
         onOpenNotes={() => setNotesOpen(true)}

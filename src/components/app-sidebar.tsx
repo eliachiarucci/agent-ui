@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Brain, CalendarClock, FolderOpen, MessageSquare, PanelLeftClose, Plus, Settings, StickyNote, Trash2, Users } from "lucide-react"
+import { Archive, ArchiveRestore, Brain, CalendarClock, FolderOpen, MessageSquare, PanelLeftClose, Plus, Settings, StickyNote, Trash2, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Separator } from "@/components/ui/separator"
@@ -32,6 +32,11 @@ type AppSidebarProps = {
   onSelect: (id: string) => void
   onNewChat: () => void
   onDelete: (id: string) => void
+  // Archive (or unarchive, in the archived view) a conversation.
+  onArchive: (id: string, archived: boolean) => void
+  // The list shows archived conversations instead of the normal ones.
+  showArchived: boolean
+  onToggleArchived: () => void
   onOpenMemories: () => void
   onOpenFiles: () => void
   onOpenNotes: () => void
@@ -52,6 +57,9 @@ export function AppSidebar({
   onSelect,
   onNewChat,
   onDelete,
+  onArchive,
+  showArchived,
+  onToggleArchived,
   onOpenMemories,
   onOpenFiles,
   onOpenNotes,
@@ -105,9 +113,15 @@ export function AppSidebar({
 
           {!loading && conversations.length === 0 && (
             <p className="px-2 py-6 text-center text-sm text-muted-foreground">
-              No conversations yet.
-              <br />
-              Start a new chat!
+              {showArchived ? (
+                "No archived conversations."
+              ) : (
+                <>
+                  No conversations yet.
+                  <br />
+                  Start a new chat!
+                </>
+              )}
             </p>
           )}
 
@@ -135,6 +149,25 @@ export function AppSidebar({
               <Button
                 variant="ghost"
                 size="icon"
+                aria-label={showArchived ? "Unarchive conversation" : "Archive conversation"}
+                title={showArchived ? "Unarchive" : "Archive"}
+                className={cn(
+                  "size-7 shrink-0 transition-opacity",
+                  conversation.id === activeId
+                    ? "opacity-60 hover:opacity-100"
+                    : "opacity-0 group-hover:opacity-60 group-hover:hover:opacity-100"
+                )}
+                onClick={() => onArchive(conversation.id, !showArchived)}
+              >
+                {showArchived ? (
+                  <ArchiveRestore className="size-3.5" />
+                ) : (
+                  <Archive className="size-3.5" />
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
                 aria-label="Delete conversation"
                 className={cn(
                   "mr-1 size-7 shrink-0 transition-opacity hover:text-destructive",
@@ -149,6 +182,18 @@ export function AppSidebar({
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="px-3 pb-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="w-full justify-start gap-2 text-muted-foreground"
+          onClick={onToggleArchived}
+        >
+          {showArchived ? <ArchiveRestore className="size-4" /> : <Archive className="size-4" />}
+          {showArchived ? "Back to chats" : "Archived chats"}
+        </Button>
       </div>
 
       <Separator />

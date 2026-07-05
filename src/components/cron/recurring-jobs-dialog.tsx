@@ -49,6 +49,7 @@ import { useProviders } from "@/hooks/use-providers"
 import {
   testProvider,
   type Agent,
+  type CronAskPolicy,
   type CronJob,
   type CronJobRun,
   type CronRecurrence,
@@ -140,6 +141,7 @@ export function RecurringJobsDialog({
     try {
       if (editing) {
         await update(editing.id, {
+          ...(values.agentId !== editing.agentId && { agentId: values.agentId }),
           // Cleared title → null: the agent names the job on its next run.
           title: values.title || null,
           prompt: values.prompt,
@@ -148,6 +150,7 @@ export function RecurringJobsDialog({
           recurrence: values.recurrence,
           provider: values.model?.provider ?? null,
           model: values.model?.model ?? null,
+          askPolicy: values.askPolicy,
         })
         toast.success("Job updated")
       } else {
@@ -159,6 +162,7 @@ export function RecurringJobsDialog({
           time: values.time,
           recurrence: values.recurrence,
           ...(values.model ? { provider: values.model.provider, model: values.model.model } : {}),
+          askPolicy: values.askPolicy,
         })
         toast.success("Recurring job created")
       }
@@ -561,12 +565,13 @@ type JobFormValues = {
   time: string
   recurrence: CronRecurrence
   model: JobModel
+  askPolicy: CronAskPolicy
 }
 
 type JobFormProps = {
   agents: Agent[]
   activeAgentId?: string
-  // Pre-fills the form for editing; the agent is fixed then.
+  // Pre-fills the form for editing.
   initial?: CronJob
   onSubmit: (values: JobFormValues) => Promise<void>
 }
@@ -582,6 +587,7 @@ function JobForm({ agents, activeAgentId, initial, onSubmit }: JobFormProps) {
       ? { provider: initial.provider, model: initial.model }
       : null
   )
+  const [askPolicy, setAskPolicy] = useState<CronAskPolicy>(initial?.askPolicy ?? "deny")
   const [prompt, setPrompt] = useState(initial?.prompt ?? "")
   const [submitting, setSubmitting] = useState(false)
 
@@ -605,6 +611,7 @@ function JobForm({ agents, activeAgentId, initial, onSubmit }: JobFormProps) {
         time,
         recurrence,
         model,
+        askPolicy,
       })
     } finally {
       setSubmitting(false)
@@ -678,8 +685,8 @@ function JobForm({ agents, activeAgentId, initial, onSubmit }: JobFormProps) {
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="job-agent">Agent</Label>
-          {/* A job is pinned to its agent (memory pool, runs, permissions). */}
-          <Select value={agentId} onValueChange={setAgentId} disabled={initial !== undefined}>
+          {/* Runs use this agent's memory pool, permissions, and system prompt. */}
+          <Select value={agentId} onValueChange={setAgentId}>
             <SelectTrigger id="job-agent" className="w-full">
               <SelectValue placeholder="Pick an agent" />
             </SelectTrigger>
@@ -697,6 +704,24 @@ function JobForm({ agents, activeAgentId, initial, onSubmit }: JobFormProps) {
           <Label>Model</Label>
           <ModelPicker value={model} onChange={setModel} />
         </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="job-ask-policy">Tools that ask for approval</Label>
+        <Select value={askPolicy} onValueChange={(v) => setAskPolicy(v as CronAskPolicy)}>
+          <SelectTrigger id="job-ask-policy" className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="deny">Skip them (default)</SelectItem>
+            <SelectItem value="allow">Run without asking</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          What runs do with tools set to “Ask” in Settings → Tools, since nobody is there to
+          approve. Only applies while the job runs — chatting in the run's conversation asks as
+          usual.
+        </p>
       </div>
 
       <div className="flex flex-col gap-2">
