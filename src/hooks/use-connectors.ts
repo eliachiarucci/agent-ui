@@ -4,6 +4,7 @@ import {
   deleteConnector,
   listConnectors,
   saveConnector,
+  setConnectorEnabled,
   type ConnectorInfo,
   type ConnectorType,
 } from "@/lib/api"
@@ -74,6 +75,24 @@ export function useConnectors() {
     []
   )
 
+  /**
+   * The card's on/off switch. Optimistic — the switch flips immediately and
+   * rolls back if the request fails (already toasted).
+   */
+  const toggle = useCallback(async (connector: ConnectorType, enabled: boolean) => {
+    const previous = connectors
+    setConnectors(connectors.map((c) => (c.connector === connector ? { ...c, enabled } : c)))
+    try {
+      const saved = await setConnectorEnabled(connector, enabled)
+      setConnectors(connectors.map((c) => (c.connector === connector ? saved : c)))
+    } catch (error) {
+      setConnectors(previous)
+      toast.error(enabled ? "Failed to enable connector" : "Failed to disable connector", {
+        description: error instanceof Error ? error.message : undefined,
+      })
+    }
+  }, [])
+
   /** Disconnects and forgets the credentials. Returns false on failure (already toasted). */
   const remove = useCallback(async (connector: ConnectorType) => {
     try {
@@ -92,5 +111,5 @@ export function useConnectors() {
     }
   }, [])
 
-  return { connectors: list, loading: !isLoaded, save, remove }
+  return { connectors: list, loading: !isLoaded, save, toggle, remove }
 }

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import { useConnectors } from "@/hooks/use-connectors"
 import { cn } from "@/lib/utils"
 import {
@@ -102,7 +103,7 @@ export function ToolsSettings({
   agents: Agent[]
   activeAgentId?: string
 }) {
-  const { connectors, loading, save, remove } = useConnectors()
+  const { connectors, loading, save, toggle, remove } = useConnectors()
   // Tool permissions are scoped per agent; start from the active one.
   const [agentId, setAgentId] = useState<string | undefined>(activeAgentId ?? agents[0]?.id)
   const [expanded, setExpanded] = useState<ConnectorType | null>(null)
@@ -206,6 +207,7 @@ export function ToolsSettings({
           permissions={permissions}
           onSetLevel={setToolLevel}
           onSave={save}
+          onToggleEnabled={toggle}
           onRemove={remove}
         />
       ))}
@@ -317,6 +319,7 @@ function ConnectorCard({
   permissions,
   onSetLevel,
   onSave,
+  onToggleEnabled,
   onRemove,
 }: {
   info: ConnectorInfo
@@ -333,6 +336,7 @@ function ConnectorCard({
     connector: ConnectorType,
     input: { clientId: string; clientSecret?: string }
   ) => Promise<ConnectorInfo | undefined>
+  onToggleEnabled: (connector: ConnectorType, enabled: boolean) => Promise<void>
   onRemove: (connector: ConnectorType) => Promise<boolean>
 }) {
   const connected = info.status === "connected"
@@ -343,40 +347,70 @@ function ConnectorCard({
     // item: without it, the truncated (nowrap) description propagates its full
     // single-line width upward and forces the whole dialog wider.
     <div className="overflow-hidden rounded-lg border">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        className="flex w-full items-center gap-3 p-3 text-left"
-        onClick={onToggle}
-      >
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/50">
-          <meta.icon className="size-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">Google {info.name}</span>
-            {connected && (
-              <Badge variant="secondary" className="gap-1 text-xs">
-                <Check className="size-3" />
-                {info.email ?? "Connected"}
-              </Badge>
-            )}
-            {info.status === "error" && (
-              <Badge variant="destructive" className="gap-1 text-xs">
-                <TriangleAlert className="size-3" />
-                Reconnect needed
-              </Badge>
-            )}
-          </div>
-          <p className="truncate text-xs text-muted-foreground">{meta.tagline}</p>
-        </div>
-        <ChevronDown
+      {/* The expand control and the enable switch are sibling controls (a
+          switch may not nest inside a button): the icon+text area expands the
+          card, the switch and chevron sit after it in the same row. */}
+      <div className="flex w-full items-center gap-3 p-3">
+        <button
+          type="button"
+          aria-expanded={expanded}
           className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform",
-            expanded && "rotate-180"
+            "flex min-w-0 flex-1 items-center gap-3 text-left",
+            connected && !info.enabled && "opacity-60"
           )}
-        />
-      </button>
+          onClick={onToggle}
+        >
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/50">
+            <meta.icon className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">Google {info.name}</span>
+              {connected && (
+                <Badge variant="secondary" className="gap-1 text-xs">
+                  <Check className="size-3" />
+                  {info.email ?? "Connected"}
+                </Badge>
+              )}
+              {connected && !info.enabled && (
+                <Badge variant="outline" className="text-xs">
+                  Off
+                </Badge>
+              )}
+              {info.status === "error" && (
+                <Badge variant="destructive" className="gap-1 text-xs">
+                  <TriangleAlert className="size-3" />
+                  Reconnect needed
+                </Badge>
+              )}
+            </div>
+            <p className="truncate text-xs text-muted-foreground">{meta.tagline}</p>
+          </div>
+        </button>
+        {/* Only connected connectors offer tools, so only they can be switched
+            off. Credentials and tokens stay; flipping back needs no reconnect. */}
+        {connected && (
+          <Switch
+            checked={info.enabled}
+            onCheckedChange={(checked) => void onToggleEnabled(info.connector, checked)}
+            aria-label={`${info.enabled ? "Disable" : "Enable"} Google ${info.name} tools`}
+          />
+        )}
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-label={expanded ? "Collapse" : "Expand"}
+          className="shrink-0"
+          onClick={onToggle}
+        >
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              expanded && "rotate-180"
+            )}
+          />
+        </button>
+      </div>
 
       {expanded && (
         <div className="grid gap-4 border-t p-3">

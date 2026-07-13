@@ -790,6 +790,9 @@ export type ConnectorInfo = {
   clientId: string | null
   hasClientSecret: boolean
   status: ConnectorStatus
+  // The card's on/off switch: off withholds the connector's tools from the
+  // agent while keeping credentials and tokens.
+  enabled: boolean
   // The connected Google account, once linked.
   email: string | null
   updatedAt: string | null
@@ -808,6 +811,19 @@ export function saveConnector(
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
+  })
+}
+
+// The card's on/off switch: disabling withholds the connector's tools without
+// touching credentials or tokens, so re-enabling needs no reconnect.
+export function setConnectorEnabled(
+  connector: ConnectorType,
+  enabled: boolean
+): Promise<ConnectorInfo> {
+  return request<ConnectorInfo>(`${CONNECTORS_URL}/${connector}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ enabled }),
   })
 }
 
