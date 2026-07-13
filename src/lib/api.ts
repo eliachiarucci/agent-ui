@@ -765,7 +765,7 @@ export function deleteProvider(provider: ProviderType): Promise<void> {
 const CONNECTORS_URL = "/agent/connectors"
 const TOOL_PERMISSIONS_URL = "/agent/tool-permissions"
 
-export type ConnectorType = "gmail"
+export type ConnectorType = "gmail" | "google-calendar"
 export type ConnectorStatus = "disconnected" | "connected" | "error"
 
 // One tool of a connector, as listed in the backend's catalog. `kind` groups

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import {
+  CalendarDays,
   Check,
   ChevronDown,
   Copy,
@@ -10,6 +11,7 @@ import {
   Trash2,
   TriangleAlert,
   Unplug,
+  type LucideIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -66,6 +68,31 @@ async function copyText(text: string): Promise<boolean> {
       el.remove()
     }
   }
+}
+
+// Purely presentational per-connector bits the backend catalog doesn't carry:
+// card icon, one-line tagline, and which Google API the setup wizard tells the
+// user to enable in their Cloud project.
+const CONNECTOR_META: Record<
+  ConnectorType,
+  { icon: LucideIcon; tagline: string; api: { name: string; href: string } }
+> = {
+  gmail: {
+    icon: Mail,
+    tagline: "Search email, read threads, manage labels, draft and send — writes ask first.",
+    api: {
+      name: "Gmail API",
+      href: "https://console.cloud.google.com/apis/library/gmail.googleapis.com",
+    },
+  },
+  "google-calendar": {
+    icon: CalendarDays,
+    tagline: "Read your schedule, find free time, create and manage events — writes ask first.",
+    api: {
+      name: "Google Calendar API",
+      href: "https://console.cloud.google.com/apis/library/calendar-json.googleapis.com",
+    },
+  },
 }
 
 export function ToolsSettings({
@@ -309,6 +336,7 @@ function ConnectorCard({
   onRemove: (connector: ConnectorType) => Promise<boolean>
 }) {
   const connected = info.status === "connected"
+  const meta = CONNECTOR_META[info.connector]
 
   return (
     // overflow-hidden also zeroes the card's min-content contribution as a grid
@@ -322,7 +350,7 @@ function ConnectorCard({
         onClick={onToggle}
       >
         <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/50">
-          <Mail className="size-4" />
+          <meta.icon className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
@@ -340,9 +368,7 @@ function ConnectorCard({
               </Badge>
             )}
           </div>
-          <p className="truncate text-xs text-muted-foreground">
-            Search email, read threads, manage labels and prepare drafts — it can never send.
-          </p>
+          <p className="truncate text-xs text-muted-foreground">{meta.tagline}</p>
         </div>
         <ChevronDown
           className={cn(
@@ -445,10 +471,9 @@ function SetupWizard({
             .
           </li>
           <li>
-            Enable the <span className="font-medium">Gmail API</span> for it (
-            <WizardLink href="https://console.cloud.google.com/apis/library/gmail.googleapis.com">
-              API library
-            </WizardLink>
+            Enable the <span className="font-medium">{CONNECTOR_META[info.connector].api.name}</span>{" "}
+            for it (
+            <WizardLink href={CONNECTOR_META[info.connector].api.href}>API library</WizardLink>
             ).
           </li>
           <li>
