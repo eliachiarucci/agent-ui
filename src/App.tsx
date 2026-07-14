@@ -85,12 +85,11 @@ function Workspace() {
     const connector = params.get("connector")
     const status = params.get("connector_status")
     if (!connector || !status) return
-    const name =
-      connector === "gmail"
-        ? "Gmail"
-        : connector === "google-calendar"
-          ? "Google Calendar"
-          : connector
+    const names: Record<string, string> = {
+      gmail: "Gmail",
+      "google-calendar": "Google Calendar",
+    }
+    const name = names[connector] ?? connector
     if (status === "connected") {
       toast.success(`${name} connected`)
     } else {
