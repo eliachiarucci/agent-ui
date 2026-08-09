@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { getFileContent, type FileContent } from "@/lib/api"
+import { getFileContent, type FileContent, type FileSource } from "@/lib/api"
 
 const POLL_INTERVAL_MS = 2000
 
@@ -7,17 +7,25 @@ const POLL_INTERVAL_MS = 2000
 // refreshes while the agent edits the file. State only changes when the file
 // does (updatedAt/content compare), so polling doesn't cause re-renders.
 // Callers remount the hook (React key) when the target file changes.
-export function useFileContent(conversationId: string, name: string) {
+// `enabled: false` skips fetching entirely (binary files render via the
+// download URL instead of the utf8 content route).
+export function useFileContent(
+  conversationId: string,
+  name: string,
+  options: { source?: FileSource; enabled?: boolean } = {}
+) {
+  const { source, enabled = true } = options
   const [file, setFile] = useState<FileContent | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     let timer: ReturnType<typeof setTimeout>
 
     const poll = async () => {
       try {
-        const next = await getFileContent({ conversationId, name })
+        const next = await getFileContent({ conversationId, name, source })
         if (cancelled) return
         setError(null)
         setFile((prev) =>
@@ -37,7 +45,7 @@ export function useFileContent(conversationId: string, name: string) {
       cancelled = true
       clearTimeout(timer)
     }
-  }, [conversationId, name])
+  }, [conversationId, name, source, enabled])
 
-  return { file, error, loading: file === null && error === null }
+  return { file, error, loading: enabled && file === null && error === null }
 }

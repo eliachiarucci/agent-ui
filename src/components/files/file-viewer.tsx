@@ -4,7 +4,8 @@ import remarkGfm from "remark-gfm"
 import { Download, FileText, Loader2, Maximize2, Minimize2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useFileContent } from "@/hooks/use-file-content"
-import { fileDownloadUrl } from "@/lib/api"
+import { cachedImagePreview } from "@/lib/image-previews"
+import { fileDownloadUrl, imageMediaTypeFor, type FileSource } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 type FileViewerProps = {
@@ -32,11 +33,37 @@ export const MARKDOWN_CLASSES =
 
 // One file's live content; remounted (keyed) per file so polling and scroll
 // state start fresh when the tab changes. Also used by the files dialog's
-// preview popup.
-export function FileContentPane({ conversationId, name }: { conversationId: string; name: string }) {
-  const { file, error, loading } = useFileContent(conversationId, name)
+// preview popup (which passes `source` for uploaded files).
+export function FileContentPane({
+  conversationId,
+  name,
+  source,
+}: {
+  conversationId: string
+  name: string
+  source?: FileSource
+}) {
+  // Images are binary: rendered straight from the download URL, never fetched
+  // through the utf8 content route (no polling — uploads don't change).
+  const isImage = imageMediaTypeFor(name) !== null
+  const { file, error, loading } = useFileContent(conversationId, name, {
+    source,
+    enabled: !isImage,
+  })
   const extension = extensionOf(name)
   const isHtml = extension === "html" || extension === "htm"
+
+  if (isImage) {
+    return (
+      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto p-4">
+        <img
+          src={cachedImagePreview(conversationId, name) ?? fileDownloadUrl({ conversationId, name, source })}
+          alt={name}
+          className="max-h-full max-w-full rounded-md object-contain"
+        />
+      </div>
+    )
+  }
 
   return (
     // HTML owns the full pane (the iframe scrolls itself); everything else

@@ -4,7 +4,11 @@ import { isToolOrDynamicToolUIPart } from "ai"
 import { Brain, Lock, LockOpen } from "lucide-react"
 import { toast } from "sonner"
 import { MessageList } from "@/components/chat/message-list"
-import { ChatInput, type PendingAttachment } from "@/components/chat/chat-input"
+import {
+  ChatInput,
+  type AttachedImage,
+  type PendingAttachment,
+} from "@/components/chat/chat-input"
 import { StatusBar } from "@/components/chat/status-bar"
 import { EmptyState } from "@/components/chat/empty-state"
 import { Button } from "@/components/ui/button"
@@ -12,8 +16,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { markApprovalAlways, setChatDataCallback } from "@/lib/chat"
 import { ApprovalContext, type ApprovalActions } from "@/lib/approval-context"
 import { useActiveModel } from "@/lib/active-model"
+import { useContextWindow } from "@/hooks/use-context-window"
 import { useDefaultModel } from "@/hooks/use-default-model"
-import { formatAttachmentsMarker, uploadFile, type AgentUIMessage } from "@/lib/api"
+import {
+  fileDownloadUrl,
+  formatAttachmentsMarker,
+  uploadFile,
+  type AgentUIMessage,
+} from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 type ChatViewProps = {
@@ -153,11 +163,21 @@ export function ChatView({
   const { selected: defaultModel } = useDefaultModel()
   const hasModel = Boolean(active || defaultModel)
 
+  // The attach button only shows for models that take image input; an unknown
+  // capability (null, or the lookup still loading) keeps it available.
+  const contextWindow = useContextWindow()
+  const canAttachImages = contextWindow?.supportsImages !== false
+
   // Attachments are uploaded to the conversation's workspace first, then the
   // message carries an <attached-files> marker (rendered as chips, read by the
-  // agent via readFile). Upload failure aborts the send so the composer can
-  // keep the chips for a retry.
-  const send = async (text: string, attachments: PendingAttachment[] = []) => {
+  // agent via readFile). Images were already uploaded by the composer and ride
+  // as real file parts, so vision models see the pixels. Upload failure aborts
+  // the send so the composer can keep the chips for a retry.
+  const send = async (
+    text: string,
+    attachments: PendingAttachment[] = [],
+    images: AttachedImage[] = []
+  ) => {
     if (!hasModel) {
       toast.error("Select a model first", {
         description: "Pick a default model in Settings → Models, or choose one in the status bar below.",
@@ -179,9 +199,21 @@ export function ChatView({
       toast.error(e instanceof Error ? e.message : "Failed to attach file")
       throw e
     }
-    onMessageSent(text || attachments[0]?.label || "Attachment")
+    onMessageSent(text || attachments[0]?.label || (images.length > 0 ? "Image" : "Attachment"))
     const parts: AgentUIMessage["parts"] = [
       ...(text ? [{ type: "text" as const, text }] : []),
+      // Mirrors the parts the backend stores, so the optimistic message renders
+      // like the reloaded one (the url is the upload's download route).
+      ...images.map((image) => ({
+        type: "file" as const,
+        mediaType: image.mediaType,
+        filename: image.name,
+        url: fileDownloadUrl({
+          conversationId: chat.id,
+          name: image.name,
+          source: "upload",
+        }),
+      })),
       ...(attachments.length > 0
         ? [
             {
@@ -263,6 +295,8 @@ export function ChatView({
       )}
       <ChatInput
         busy={busy}
+        conversationId={chat.id}
+        canAttachImages={canAttachImages}
         noModel={!hasModel}
         approvalPending={approvalPending}
         onSend={send}

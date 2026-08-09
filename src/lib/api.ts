@@ -315,6 +315,9 @@ export function deleteAgent(id: string): Promise<void> {
 export type ContextWindow = {
   model: string
   contextLength: number | null
+  // Whether the model accepts image input; null when the provider can't say
+  // (the composer keeps the attach button available then).
+  supportsImages: boolean | null
 }
 
 // Without a target it reports the user's default model (else the env default).
@@ -413,13 +416,38 @@ export function deleteMemoryPool(id: string): Promise<void> {
 
 // ── Files ───────────────────────────────────────────────────────────────────
 
-// A file the agent saved in a conversation's folder. The backend lists them
-// flat across every conversation the viewer can see in the agent.
+// Where a file came from: written by the agent's file tools, or uploaded by a
+// user (chat images, pasted attachments). Mirrors the backend's FileSource.
+export type FileSource = "agent" | "upload"
+
+// A file in a conversation's folder. The backend lists them flat across every
+// conversation the viewer can see in the agent.
 export type StoredFile = {
   conversationId: string
   name: string
   size: number
   updatedAt: string
+  source: FileSource
+}
+
+// Image types the chat accepts as attachments; must stay in sync with the
+// backend's IMAGE_MEDIA_TYPES (agent/lib/agent/files.ts).
+export const IMAGE_MEDIA_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+}
+
+// What the native picker offers (media types keep folders of other files greyed out).
+export const IMAGE_FILE_ACCEPT = [...new Set(Object.values(IMAGE_MEDIA_TYPES))].join(",")
+
+/** Media type for a supported image file name, or null when it isn't one. */
+export function imageMediaTypeFor(name: string): string | null {
+  const dot = name.lastIndexOf(".")
+  if (dot === -1) return null
+  return IMAGE_MEDIA_TYPES[name.slice(dot + 1).toLowerCase()] ?? null
 }
 
 export function listFiles(agentId?: string): Promise<StoredFile[]> {
@@ -427,10 +455,10 @@ export function listFiles(agentId?: string): Promise<StoredFile[]> {
   return request<StoredFile[]>(url)
 }
 
-// Uploads raw file bytes into a conversation's workspace. The body is the file
-// content verbatim (default content type keeps the backend's express.json() from
-// touching the stream); name and conversation ride in the query string. Used for
-// pasted-content attachments today; documents and images will reuse it.
+// Uploads raw file bytes into a conversation's uploads folder. The body is the
+// file content verbatim (default content type keeps the backend's express.json()
+// from touching the stream); name and conversation ride in the query string.
+// Used for pasted-content attachments and chat image uploads.
 export function uploadFile(params: {
   conversationId: string
   name: string
@@ -445,6 +473,15 @@ export function uploadFile(params: {
       headers: { "content-type": contentType ?? "application/octet-stream" },
       body: content,
     }
+  )
+}
+
+// Removes one upload (an image detached in the composer before sending). Only
+// uploads are deletable; agent artifacts live with the conversation.
+export function deleteUploadedFile(params: { conversationId: string; name: string }): Promise<void> {
+  return request<void>(
+    `${FILES_URL}?conversation_id=${encodeURIComponent(params.conversationId)}&name=${encodeURIComponent(params.name)}`,
+    { method: "DELETE" }
   )
 }
 
@@ -475,8 +512,12 @@ export async function downloadBackup(): Promise<void> {
 }
 
 // Plain href, no fetch: the browser handles the attachment download itself.
-export function fileDownloadUrl(file: Pick<StoredFile, "conversationId" | "name">): string {
-  return `${FILE_DOWNLOAD_URL}?conversation_id=${encodeURIComponent(file.conversationId)}&name=${encodeURIComponent(file.name)}`
+// `source` defaults to agent files server-side; uploads must say so.
+export function fileDownloadUrl(
+  file: Pick<StoredFile, "conversationId" | "name"> & { source?: FileSource }
+): string {
+  const url = `${FILE_DOWNLOAD_URL}?conversation_id=${encodeURIComponent(file.conversationId)}&name=${encodeURIComponent(file.name)}`
+  return file.source === "upload" ? `${url}&source=upload` : url
 }
 
 export type FileContent = {
@@ -488,11 +529,10 @@ export type FileContent = {
 
 // Backs the file viewer; it polls this and re-renders when updatedAt moves.
 export function getFileContent(
-  file: Pick<StoredFile, "conversationId" | "name">
+  file: Pick<StoredFile, "conversationId" | "name"> & { source?: FileSource }
 ): Promise<FileContent> {
-  return request<FileContent>(
-    `${FILES_URL}/content?conversation_id=${encodeURIComponent(file.conversationId)}&name=${encodeURIComponent(file.name)}`
-  )
+  const url = `${FILES_URL}/content?conversation_id=${encodeURIComponent(file.conversationId)}&name=${encodeURIComponent(file.name)}`
+  return request<FileContent>(file.source === "upload" ? `${url}&source=upload` : url)
 }
 
 // ── Notes ───────────────────────────────────────────────────────────────────

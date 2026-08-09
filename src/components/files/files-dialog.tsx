@@ -1,5 +1,16 @@
 import { useState } from "react"
-import { Download, Eye, FileText, FolderOpen, MessageSquare } from "lucide-react"
+import {
+  ArrowLeft,
+  Bot,
+  ChevronRight,
+  Download,
+  Eye,
+  FileText,
+  Folder,
+  FolderOpen,
+  MessageSquare,
+  Upload,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -9,9 +20,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { FileContentPane } from "@/components/files/file-viewer"
+import { FilePreviewDialog } from "@/components/files/file-preview-dialog"
 import { useFiles } from "@/hooks/use-files"
-import { fileDownloadUrl, type StoredFile } from "@/lib/api"
+import { cachedImagePreview } from "@/lib/image-previews"
+import { formatSize } from "@/lib/utils"
+import { fileDownloadUrl, imageMediaTypeFor, type FileSource, type StoredFile } from "@/lib/api"
 
 type FilesDialogProps = {
   open: boolean
@@ -22,23 +35,45 @@ type FilesDialogProps = {
   onOpenConversation: (conversationId: string) => void
 }
 
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
+const FOLDERS: Array<{
+  source: FileSource
+  label: string
+  description: string
+  icon: typeof Bot
+}> = [
+  {
+    source: "agent",
+    label: "Agent files",
+    description: "Documents, plans, and code the agent wrote",
+    icon: Bot,
+  },
+  {
+    source: "upload",
+    label: "Uploaded files",
+    description: "Images and files you attached in chats",
+    icon: Upload,
+  },
+]
 
-// All of the agent's files (that the viewer can see) in one flat list — the
-// per-conversation folders are a backend detail and stay hidden here.
+// Two folders — files the agent generated and files users uploaded — each
+// holding a flat list across every conversation the viewer can see (the
+// per-conversation folders on disk stay a backend detail).
 export function FilesDialog({ open, onOpenChange, agentId, onOpenConversation }: FilesDialogProps) {
   const { files, loading } = useFiles(open, agentId)
+  const [folder, setFolder] = useState<FileSource | null>(null)
   // File previewed in the nested dialog (stacked on top of this one).
   const [preview, setPreview] = useState<StoredFile | null>(null)
 
   const handleOpenChange = (next: boolean) => {
-    if (!next) setPreview(null)
+    if (!next) {
+      setPreview(null)
+      setFolder(null)
+    }
     onOpenChange(next)
   }
+
+  const activeFolder = FOLDERS.find((f) => f.source === folder)
+  const shown = folder ? files.filter((file) => file.source === folder) : []
 
   return (
     <>
@@ -47,12 +82,30 @@ export function FilesDialog({ open, onOpenChange, agentId, onOpenConversation }:
         <DialogContent className="flex h-[min(85vh,44rem)] flex-col sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FolderOpen className="size-5" />
-              Files
+              {activeFolder ? (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Back to folders"
+                    className="-ml-1 size-7"
+                    onClick={() => setFolder(null)}
+                  >
+                    <ArrowLeft className="size-4" />
+                  </Button>
+                  {activeFolder.label}
+                </>
+              ) : (
+                <>
+                  <FolderOpen className="size-5" />
+                  Files
+                </>
+              )}
             </DialogTitle>
             <DialogDescription>
-              Files the agent created in your conversations. View, download, or
-              jump to the chat that made them.
+              {activeFolder
+                ? `${activeFolder.description}. View, download, or jump to the chat they belong to.`
+                : "Files from your conversations: what the agent created and what you uploaded."}
             </DialogDescription>
           </DialogHeader>
 
@@ -68,57 +121,99 @@ export function FilesDialog({ open, onOpenChange, agentId, onOpenConversation }:
                 </div>
               )}
 
-              {!loading && files.length === 0 && (
+              {!loading &&
+                !folder &&
+                FOLDERS.map(({ source, label, description, icon: Icon }) => {
+                  const count = files.filter((file) => file.source === source).length
+                  return (
+                    <button
+                      key={source}
+                      type="button"
+                      onClick={() => setFolder(source)}
+                      className="group flex items-center gap-3 rounded-md border px-3 py-3 text-left transition-colors hover:bg-muted/60"
+                    >
+                      <Folder className="size-5 shrink-0 text-muted-foreground" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{label}</p>
+                        <p className="truncate text-xs text-muted-foreground">{description}</p>
+                      </div>
+                      <span className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground">
+                        <Icon className="size-3.5" />
+                        {count} {count === 1 ? "file" : "files"}
+                        <ChevronRight className="size-4 opacity-60 transition-transform group-hover:translate-x-0.5" />
+                      </span>
+                    </button>
+                  )
+                })}
+
+              {!loading && folder && shown.length === 0 && (
                 <p className="py-10 text-center text-sm text-muted-foreground">
-                  No files yet. Ask the agent to write something down — a plan, a
-                  document, some code — and it will show up here.
+                  {folder === "agent"
+                    ? "No files yet. Ask the agent to write something down — a plan, a document, some code — and it will show up here."
+                    : "Nothing uploaded yet. Attach images or paste long text in a chat and it will show up here."}
                 </p>
               )}
 
               {!loading &&
-                files.map((file) => (
-                  <div
-                    key={`${file.conversationId}/${file.name}`}
-                    className="group flex items-center gap-3 rounded-md border px-3 py-2"
-                  >
-                    <FileText className="size-4 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">{file.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatSize(file.size)} · {new Date(file.updatedAt).toLocaleDateString()}
-                      </p>
+                folder &&
+                shown.map((file) => {
+                  const isImage = imageMediaTypeFor(file.name) !== null
+                  return (
+                    <div
+                      key={`${file.conversationId}/${file.source}/${file.name}`}
+                      className="group flex items-center gap-3 rounded-md border px-3 py-2"
+                    >
+                      {isImage ? (
+                        <img
+                          src={
+                            cachedImagePreview(file.conversationId, file.name) ??
+                            fileDownloadUrl(file)
+                          }
+                          alt=""
+                          loading="lazy"
+                          className="size-9 shrink-0 rounded-md border object-cover"
+                        />
+                      ) : (
+                        <FileText className="size-4 shrink-0 text-muted-foreground" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{file.name}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatSize(file.size)} · {new Date(file.updatedAt).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`View ${file.name}`}
+                        className="shrink-0 opacity-60 hover:opacity-100"
+                        onClick={() => setPreview(file)}
+                      >
+                        <Eye className="size-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Open chat for ${file.name}`}
+                        className="shrink-0 opacity-60 hover:opacity-100"
+                        onClick={() => onOpenConversation(file.conversationId)}
+                      >
+                        <MessageSquare className="size-4" />
+                      </Button>
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="icon"
+                        aria-label={`Download ${file.name}`}
+                        className="shrink-0 opacity-60 hover:opacity-100"
+                      >
+                        <a href={fileDownloadUrl(file)} download={file.name}>
+                          <Download className="size-4" />
+                        </a>
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`View ${file.name}`}
-                      className="shrink-0 opacity-60 hover:opacity-100"
-                      onClick={() => setPreview(file)}
-                    >
-                      <Eye className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Open chat for ${file.name}`}
-                      className="shrink-0 opacity-60 hover:opacity-100"
-                      onClick={() => onOpenConversation(file.conversationId)}
-                    >
-                      <MessageSquare className="size-4" />
-                    </Button>
-                    <Button
-                      asChild
-                      variant="ghost"
-                      size="icon"
-                      aria-label={`Download ${file.name}`}
-                      className="shrink-0 opacity-60 hover:opacity-100"
-                    >
-                      <a href={fileDownloadUrl(file)} download={file.name}>
-                        <Download className="size-4" />
-                      </a>
-                    </Button>
-                  </div>
-                ))}
+                  )
+                })}
             </div>
           </div>
         </DialogContent>
@@ -126,29 +221,7 @@ export function FilesDialog({ open, onOpenChange, agentId, onOpenConversation }:
 
       {/* Preview popup, stacked on top of the files dialog (rendered later in
           the portal, so it sits above). */}
-      <Dialog open={preview !== null} onOpenChange={(next) => !next && setPreview(null)}>
-        <DialogContent className="flex h-[min(85vh,44rem)] flex-col sm:max-w-3xl">
-          {preview && (
-            <>
-              <DialogHeader>
-                <DialogTitle className="flex min-w-0 items-center gap-2">
-                  <FileText className="size-4 shrink-0 text-muted-foreground" />
-                  <span className="truncate">{preview.name}</span>
-                </DialogTitle>
-                <DialogDescription>
-                  {formatSize(preview.size)} ·{" "}
-                  {new Date(preview.updatedAt).toLocaleDateString()}
-                </DialogDescription>
-              </DialogHeader>
-              <FileContentPane
-                key={`${preview.conversationId}/${preview.name}`}
-                conversationId={preview.conversationId}
-                name={preview.name}
-              />
-            </>
-          )}
-        </DialogContent>
-      </Dialog>
+      <FilePreviewDialog file={preview} onClose={() => setPreview(null)} />
     </>
   )
 }

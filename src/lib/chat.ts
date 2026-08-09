@@ -65,6 +65,12 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
     // Files attached to this turn were already uploaded to the conversation; the
     // backend re-stores the marker and the agent reads them with readFile.
     const attachments = last?.role === "user" ? attachmentsFromParts(last.parts) : []
+    // Images ride as file parts on the optimistic message; the backend receives
+    // just the uploaded names and rebuilds equivalent parts on the stored one.
+    const images =
+      last?.role === "user"
+        ? last.parts.flatMap((p) => (p.type === "file" && p.filename ? [{ name: p.filename }] : []))
+        : []
     const options = sendOptions.get(id)
     // Read at send time so mid-conversation model switches apply to the next turn.
     const active = getActiveModel()
@@ -74,6 +80,7 @@ const transport = new DefaultChatTransport<AgentUIMessage>({
         conversation_id: id,
         ...(toolApprovals.length > 0 ? { tool_approvals: toolApprovals } : {}),
         ...(attachments.length > 0 ? { attachments } : {}),
+        ...(images.length > 0 ? { images } : {}),
         ...(options?.agentId ? { agent_id: options.agentId } : {}),
         ...(options?.shared !== undefined ? { shared: options.shared } : {}),
         ...(options?.memory !== undefined ? { memory: options.memory } : {}),
