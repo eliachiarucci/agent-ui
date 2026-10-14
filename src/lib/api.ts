@@ -746,6 +746,18 @@ export function listCronRuns(): Promise<CronJobRun[]> {
 // ── Model providers ─────────────────────────────────────────────────────────
 
 export type ProviderType = "lmstudio" | "anthropic" | "google" | "deepinfra" | "tensorx" | "openrouter" | "openai"
+// Not language models: stored and tested like the others, never a model choice.
+// Soniox: speech to text for devices' voice mode.
+export type SpeechProviderType = "soniox"
+export type StoredProviderType = ProviderType | SpeechProviderType
+
+export const SPEECH_PROVIDER_TYPES: readonly SpeechProviderType[] = ["soniox"]
+
+export function isModelProvider<T extends { provider: StoredProviderType }>(
+  config: T
+): config is T & { provider: ProviderType } {
+  return !(SPEECH_PROVIDER_TYPES as readonly string[]).includes(config.provider)
+}
 
 // What the user types into a provider card. apiKey may be omitted on updates:
 // the backend then reuses the stored key.
@@ -759,11 +771,14 @@ export type ProviderSettingsInput = {
 // server only says whether one is stored.
 export type ProviderConfig = {
   id: string
-  provider: ProviderType
+  provider: StoredProviderType
   settings: { url?: string; model?: string; hasApiKey: boolean }
   createdAt: string
   updatedAt: string
 }
+
+// A configured language-model provider (what the model pickers list).
+export type ModelProviderConfig = ProviderConfig & { provider: ProviderType }
 
 export function listProviders(): Promise<ProviderConfig[]> {
   return request<ProviderConfig[]>(PROVIDERS_URL)
@@ -772,7 +787,7 @@ export function listProviders(): Promise<ProviderConfig[]> {
 // Verifies the connection server-side without saving; returns the provider's
 // available models (used to populate the model picker).
 export function testProvider(
-  provider: ProviderType,
+  provider: StoredProviderType,
   settings: ProviderSettingsInput
 ): Promise<{ models: string[] }> {
   return request<{ models: string[] }>(PROVIDER_TEST_URL, {
@@ -784,7 +799,7 @@ export function testProvider(
 
 // The backend re-tests the connection and saves only on success (422 otherwise).
 export function saveProvider(
-  provider: ProviderType,
+  provider: StoredProviderType,
   settings: ProviderSettingsInput
 ): Promise<{ provider: ProviderConfig; models: string[] }> {
   return request<{ provider: ProviderConfig; models: string[] }>(PROVIDERS_URL, {
@@ -794,7 +809,7 @@ export function saveProvider(
   })
 }
 
-export function deleteProvider(provider: ProviderType): Promise<void> {
+export function deleteProvider(provider: StoredProviderType): Promise<void> {
   return request<void>(`${PROVIDERS_URL}?provider=${encodeURIComponent(provider)}`, {
     method: "DELETE",
   })

@@ -11,7 +11,7 @@ import {
 import { useProviders } from "@/hooks/use-providers"
 import { useDefaultModel } from "@/hooks/use-default-model"
 import { setActiveModel, useActiveModel } from "@/lib/active-model"
-import { testProvider, type ProviderConfig, type ProviderType } from "@/lib/api"
+import { testProvider, type ModelProviderConfig, type ProviderType } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const PROVIDER_LABELS: Record<ProviderType, string> = {
@@ -54,7 +54,7 @@ export function ModelSelector() {
     ? `${PROVIDER_LABELS[effective.provider]} · ${effective.model}`
     : "Select a model"
 
-  const toggleProvider = async (config: ProviderConfig) => {
+  const toggleProvider = async (config: ModelProviderConfig) => {
     const provider = config.provider
     setExpanded((cur) => (cur === provider ? null : provider))
     if (modelsByProvider[provider] !== undefined) return

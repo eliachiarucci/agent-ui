@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useProviders } from "@/hooks/use-providers"
-import { testProvider, type ProviderConfig, type ProviderType } from "@/lib/api"
+import { testProvider, type ModelProviderConfig, type ProviderType } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 export type ModelSelection = { provider: ProviderType; model: string }
@@ -62,7 +62,7 @@ export function ModelPicker({
     ? `${PROVIDER_LABELS[configured.provider]} · ${configured.model}`
     : emptyLabel
 
-  const toggleProvider = async (config: ProviderConfig) => {
+  const toggleProvider = async (config: ModelProviderConfig) => {
     const provider = config.provider
     setExpanded((cur) => (cur === provider ? null : provider))
     if (modelsByProvider[provider] !== undefined) return

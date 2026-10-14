@@ -53,7 +53,7 @@ import {
   type CronJob,
   type CronJobRun,
   type CronRecurrence,
-  type ProviderConfig,
+  type ModelProviderConfig,
   type ProviderType,
 } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -459,7 +459,7 @@ function ModelPicker({ value, onChange }: { value: JobModel; onChange: (v: JobMo
 
   const label = value ? `${PROVIDER_LABELS[value.provider]} · ${value.model}` : "Default model"
 
-  const toggleProvider = async (config: ProviderConfig) => {
+  const toggleProvider = async (config: ModelProviderConfig) => {
     const provider = config.provider
     setExpanded((cur) => (cur === provider ? null : provider))
     if (modelsByProvider[provider] !== undefined) return

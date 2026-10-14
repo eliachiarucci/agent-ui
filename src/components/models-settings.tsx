@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Bot, Check, ChevronDown, Cloud, Gem, Loader2, Plug, Server, Sparkles, Trash2, Waypoints, Zap } from "lucide-react"
+import { Bot, Check, ChevronDown, Cloud, Gem, Loader2, Mic, Plug, Server, Sparkles, Trash2, Waypoints, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -10,17 +10,19 @@ import { ModelPicker, type ModelSelection } from "@/components/model-picker"
 import { useProviders } from "@/hooks/use-providers"
 import { useDefaultModel } from "@/hooks/use-default-model"
 import { cn } from "@/lib/utils"
-import type { ProviderConfig, ProviderSettingsInput, ProviderType } from "@/lib/api"
+import type { ProviderConfig, ProviderSettingsInput, StoredProviderType } from "@/lib/api"
 
-const PROVIDERS: Array<{
-  id: ProviderType
+type ProviderMeta = {
+  id: StoredProviderType
   name: string
   description: string
   icon: typeof Server
   // Only LM Studio takes a URL; everyone else authenticates with just a key.
   keyPlaceholder: string
   keyHelp?: string
-}> = [
+}
+
+const PROVIDERS: ProviderMeta[] = [
   {
     id: "lmstudio",
     name: "LM Studio",
@@ -79,9 +81,21 @@ const PROVIDERS: Array<{
   },
 ]
 
+// Not chat models: used by devices' voice mode, never offered in the model pickers.
+const SPEECH_PROVIDERS: ProviderMeta[] = [
+  {
+    id: "soniox",
+    name: "Soniox",
+    description: "Speech to text for devices' voice mode: what a device hears becomes text for its agent.",
+    icon: Mic,
+    keyPlaceholder: "Your Soniox API key",
+    keyHelp: "Create an API key in the Soniox console (console.soniox.com).",
+  },
+]
+
 export function ModelsSettings() {
-  const { providers, loading, test, save, remove } = useProviders()
-  const [expanded, setExpanded] = useState<ProviderType | null>(null)
+  const { providers, speechProviders, loading, test, save, remove } = useProviders()
+  const [expanded, setExpanded] = useState<StoredProviderType | null>(null)
 
   if (loading) {
     return (
@@ -101,24 +115,34 @@ export function ModelsSettings() {
         Connect a model provider. Settings are verified with a test request before they
         are saved. Pick the active model from the selector in the chat's status bar.
       </p>
-      {PROVIDERS.map((meta) => {
-        const config = providers.find((p) => p.provider === meta.id)
-        return (
-          <ProviderCard
-            // Re-keying on updatedAt resets drafts after a successful save.
-            key={`${meta.id}-${config?.updatedAt ?? "new"}`}
-            meta={meta}
-            config={config}
-            expanded={expanded === meta.id}
-            onToggle={() => setExpanded((cur) => (cur === meta.id ? null : meta.id))}
-            onTest={test}
-            onSave={save}
-            onRemove={remove}
-          />
-        )
-      })}
+      {PROVIDERS.map((meta) => card(meta, providers.find((p) => p.provider === meta.id)))}
+      <Separator />
+      <div className="grid gap-1">
+        <Label>Speech</Label>
+        <p className="text-xs text-muted-foreground">
+          Speech to text for devices that listen (voice mode). Not a chat model, so it doesn't
+          appear in the model pickers.
+        </p>
+      </div>
+      {SPEECH_PROVIDERS.map((meta) => card(meta, speechProviders.find((p) => p.provider === meta.id)))}
     </div>
   )
+
+  function card(meta: ProviderMeta, config: ProviderConfig | undefined) {
+    return (
+      <ProviderCard
+        // Re-keying on updatedAt resets drafts after a successful save.
+        key={`${meta.id}-${config?.updatedAt ?? "new"}`}
+        meta={meta}
+        config={config}
+        expanded={expanded === meta.id}
+        onToggle={() => setExpanded((cur) => (cur === meta.id ? null : meta.id))}
+        onTest={test}
+        onSave={save}
+        onRemove={remove}
+      />
+    )
+  }
 }
 
 // The account default model: used for chats with no explicit selection and as
@@ -173,13 +197,13 @@ function ProviderCard({
   onSave,
   onRemove,
 }: {
-  meta: (typeof PROVIDERS)[number]
+  meta: ProviderMeta
   config?: ProviderConfig
   expanded: boolean
   onToggle: () => void
-  onTest: (provider: ProviderType, settings: ProviderSettingsInput) => Promise<string[] | undefined>
-  onSave: (provider: ProviderType, settings: ProviderSettingsInput) => Promise<boolean>
-  onRemove: (provider: ProviderType) => Promise<boolean>
+  onTest: (provider: StoredProviderType, settings: ProviderSettingsInput) => Promise<string[] | undefined>
+  onSave: (provider: StoredProviderType, settings: ProviderSettingsInput) => Promise<boolean>
+  onRemove: (provider: StoredProviderType) => Promise<boolean>
 }) {
   const Icon = meta.icon
   const hasStoredKey = config?.settings.hasApiKey ?? false

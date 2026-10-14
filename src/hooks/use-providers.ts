@@ -5,15 +5,20 @@ import {
   listProviders,
   saveProvider,
   testProvider,
+  isModelProvider,
+  type ModelProviderConfig,
   type ProviderConfig,
   type ProviderSettingsInput,
-  type ProviderType,
+  type StoredProviderType,
 } from "@/lib/api"
 
 // Module-level store shared by every mount (settings dialog, status-bar model
 // selector, ...): saving a provider in one place is immediately visible in the
 // others, and the list is fetched once per page load.
 let providers: ProviderConfig[] = []
+// Split once per change, so the snapshots stay stable for useSyncExternalStore.
+let modelProviders: ModelProviderConfig[] = []
+let speechProviders: ProviderConfig[] = []
 let loaded = false
 let pending: Promise<void> | null = null
 const listeners = new Set<() => void>()
@@ -29,6 +34,8 @@ function subscribe(fn: () => void): () => void {
 
 function setProviders(next: ProviderConfig[]) {
   providers = [...next].sort((a, b) => a.provider.localeCompare(b.provider))
+  modelProviders = providers.filter(isModelProvider)
+  speechProviders = providers.filter((p) => !isModelProvider(p))
   emit()
 }
 
@@ -49,7 +56,8 @@ function load(): Promise<void> {
 }
 
 export function useProviders() {
-  const list = useSyncExternalStore(subscribe, () => providers)
+  const list = useSyncExternalStore(subscribe, () => modelProviders)
+  const speech = useSyncExternalStore(subscribe, () => speechProviders)
   const isLoaded = useSyncExternalStore(subscribe, () => loaded)
 
   useEffect(() => {
@@ -61,7 +69,7 @@ export function useProviders() {
    * list, or undefined on failure (already toasted).
    */
   const test = useCallback(
-    async (provider: ProviderType, settings: ProviderSettingsInput) => {
+    async (provider: StoredProviderType, settings: ProviderSettingsInput) => {
       try {
         const { models } = await testProvider(provider, settings)
         return models
@@ -80,7 +88,7 @@ export function useProviders() {
    * connection check). Returns false on failure (already toasted).
    */
   const save = useCallback(
-    async (provider: ProviderType, settings: ProviderSettingsInput) => {
+    async (provider: StoredProviderType, settings: ProviderSettingsInput) => {
       try {
         const { provider: saved } = await saveProvider(provider, settings)
         setProviders([...providers.filter((p) => p.provider !== provider), saved])
@@ -97,7 +105,7 @@ export function useProviders() {
   )
 
   /** Removes the stored configuration. Returns false on failure (already toasted). */
-  const remove = useCallback(async (provider: ProviderType) => {
+  const remove = useCallback(async (provider: StoredProviderType) => {
     try {
       await deleteProvider(provider)
       setProviders(providers.filter((p) => p.provider !== provider))
@@ -110,5 +118,6 @@ export function useProviders() {
     }
   }, [])
 
-  return { providers: list, loading: !isLoaded, test, save, remove }
+  // providers: model providers only (the pickers); speechProviders: Soniox (Settings → Models → Speech).
+  return { providers: list, speechProviders: speech, loading: !isLoaded, test, save, remove }
 }
