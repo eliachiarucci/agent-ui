@@ -20,7 +20,9 @@ export default defineConfig({
     proxy: {
       '/agent': {
         target: 'http://localhost:3001',
-        changeOrigin: true
+        changeOrigin: true,
+        // Devices' WebSocket link (/agent/devices/ws), as nginx forwards it in production.
+        ws: true
       }
     }
   }

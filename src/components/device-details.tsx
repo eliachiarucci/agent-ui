@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, type ReactNode } from "react"
 import { KeyRound, Loader2, Trash2 } from "lucide-react"
 import {
   AlertDialog,
@@ -42,6 +42,7 @@ export function DeviceDetails({
   agents,
   onUpdate,
   onPair,
+  pairingPanel,
   onDelete,
 }: {
   device: Device
@@ -49,6 +50,8 @@ export function DeviceDetails({
   onUpdate: (changes: Changes) => Promise<boolean>
   // Absent while a pairing code is already showing.
   onPair?: () => Promise<void>
+  // "Pair again"'s panel, shown where the button was.
+  pairingPanel?: ReactNode
   onDelete: () => Promise<boolean>
 }) {
   const owner = device.role === "owner"
@@ -190,6 +193,7 @@ export function DeviceDetails({
       {owner && (
         <>
           <Separator />
+          {pairingPanel}
           <div className="flex flex-wrap items-center gap-2">
             {onPair && (
               <Button variant="outline" size="sm" className="gap-2" onClick={() => void onPair()}>

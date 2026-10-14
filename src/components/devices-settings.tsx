@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
-import { Check, ChevronDown, Copy, Cpu, Loader2, Plus } from "lucide-react"
+import { useState } from "react"
+import { ChevronDown, Cpu, Loader2, Plus } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { DeviceDetails } from "@/components/device-details"
+import { DevicePairingPanel } from "@/components/device-pairing"
 import { useDevices } from "@/hooks/use-devices"
 import type { Agent, Device, DevicePairing } from "@/lib/api"
 import { timeAgo } from "@/lib/devices"
@@ -36,11 +37,12 @@ export function DevicesSettings({
   const { devices, loading, add, update, remove, pair, cancelPairing } = useDevices()
   const [expanded, setExpanded] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
-  // Codes shown this session, by device; the server keeps only their hashes.
-  const [pairings, setPairings] = useState<Record<string, DevicePairing>>({})
+  // Codes shown this session, by device (the server keeps only their hashes),
+  // and where: on top of a device just added, in place of "Pair again" otherwise.
+  const [pairings, setPairings] = useState<Record<string, { pairing: DevicePairing; top: boolean }>>({})
 
-  const showPairing = (id: string, pairing: DevicePairing) => {
-    setPairings((cur) => ({ ...cur, [id]: pairing }))
+  const showPairing = (id: string, pairing: DevicePairing, top: boolean) => {
+    setPairings((cur) => ({ ...cur, [id]: { pairing, top } }))
     setExpanded(id)
   }
   const hidePairing = (id: string) =>
@@ -62,7 +64,7 @@ export function DevicesSettings({
             if (!created) return
             if (!input.agent_id) onAgentsChanged()
             setAdding(false)
-            showPairing(created.device.id, created.pairing)
+            showPairing(created.device.id, created.pairing, true)
           }}
         />
       ) : (
@@ -107,34 +109,43 @@ export function DevicesSettings({
             </button>
             {expanded === device.id && (
               <div className="grid grid-cols-[minmax(0,1fr)] gap-4 border-t p-3">
-                {pairings[device.id] && (
-                  <PairingPanel
-                    device={device}
-                    pairing={pairings[device.id]}
-                    onNewCode={async () => {
-                      const next = await pair(device.id)
-                      if (next) showPairing(device.id, next)
-                    }}
-                    onClose={() => {
-                      if (device.pairingExpiresAt) void cancelPairing(device.id)
-                      hidePairing(device.id)
-                    }}
-                  />
-                )}
-                <DeviceDetails
-                  device={device}
-                  agents={agents}
-                  onUpdate={(changes) => update(device.id, changes)}
-                  onPair={
-                    pairings[device.id]
-                      ? undefined
-                      : async () => {
-                          const next = await pair(device.id)
-                          if (next) showPairing(device.id, next)
+                {(() => {
+                  const shown = pairings[device.id]
+                  const panel = shown && (
+                    <DevicePairingPanel
+                      device={device}
+                      pairing={shown.pairing}
+                      onNewCode={async () => {
+                        const next = await pair(device.id)
+                        if (next) showPairing(device.id, next, shown.top)
+                      }}
+                      onClose={() => {
+                        if (device.pairingExpiresAt) void cancelPairing(device.id)
+                        hidePairing(device.id)
+                      }}
+                    />
+                  )
+                  return (
+                    <>
+                      {shown?.top && panel}
+                      <DeviceDetails
+                        device={device}
+                        agents={agents}
+                        onUpdate={(changes) => update(device.id, changes)}
+                        pairingPanel={shown && !shown.top ? panel : undefined}
+                        onPair={
+                          shown
+                            ? undefined
+                            : async () => {
+                                const next = await pair(device.id)
+                                if (next) showPairing(device.id, next, false)
+                              }
                         }
-                  }
-                  onDelete={() => remove(device.id)}
-                />
+                        onDelete={() => remove(device.id)}
+                      />
+                    </>
+                  )
+                })()}
               </div>
             )}
           </div>
@@ -232,108 +243,6 @@ function AddDeviceForm({
           Add and pair
         </Button>
         <Button variant="ghost" disabled={saving} onClick={onCancel}>
-          Cancel
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// The code to type on the device, how to use it, and whether the device took it.
-function PairingPanel({
-  device,
-  pairing,
-  onNewCode,
-  onClose,
-}: {
-  device: Device
-  pairing: DevicePairing
-  onNewCode: () => Promise<void>
-  onClose: () => void
-}) {
-  const [now, setNow] = useState(() => Date.now())
-  const [copied, setCopied] = useState(false)
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000)
-    return () => clearInterval(timer)
-  }, [])
-
-  // The server clears the code once the device used it.
-  const paired = device.pairingExpiresAt === null
-  const left = Math.max(0, new Date(pairing.expiresAt).getTime() - now)
-  const expired = !paired && left === 0
-  const server = window.location.origin
-  const command = `sudo rover-agent pair ${server} ${pairing.code}`
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(command)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch {
-      // Clipboard access denied; the command is on screen to copy by hand.
-    }
-  }
-
-  if (paired) {
-    return (
-      <div className="flex flex-wrap items-center gap-2 rounded-md border border-emerald-500/40 bg-emerald-500/5 p-3 text-sm">
-        {device.online ? (
-          <Check className="size-4 text-emerald-600" />
-        ) : (
-          <Loader2 className="size-4 animate-spin text-muted-foreground" />
-        )}
-        <span className="min-w-0 flex-1">
-          {device.online ? `Paired. ${device.name} is online.` : `Paired. Waiting for ${device.name} to connect…`}
-        </span>
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          Done
-        </Button>
-      </div>
-    )
-  }
-
-  return (
-    <div className="grid grid-cols-[minmax(0,1fr)] gap-3 rounded-md border bg-muted/30 p-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="text-sm font-medium">Pair {device.name}</span>
-        <span className="text-xs text-muted-foreground">
-          {expired ? "The code expired." : `Code valid for ${Math.ceil(left / 60000)} min, once.`}
-        </span>
-      </div>
-      <div className="font-mono text-2xl tracking-widest" aria-label="Pairing code">
-        {expired ? <span className="text-muted-foreground line-through">{pairing.code}</span> : pairing.code}
-      </div>
-      <div className="grid gap-1.5 text-xs text-muted-foreground">
-        <p>
-          On the device, run its pairing command with this server&apos;s address and the code. The device
-          gets its own key from the server; no key is shown here. For the rover service:
-        </p>
-        <div className="flex min-w-0 items-center gap-2 rounded-md border bg-background px-2 py-1.5">
-          <code className="min-w-0 flex-1 truncate font-mono text-foreground" title={command}>
-            {command}
-          </code>
-          <Button variant="ghost" size="icon" className="size-6 shrink-0" aria-label="Copy the command" onClick={() => void copy()}>
-            {copied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
-          </Button>
-        </div>
-        <p>
-          Server: <span className="font-mono text-foreground">{server}</span>. Pairing again later replaces
-          the device&apos;s key.
-        </p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        {expired ? (
-          <Button size="sm" onClick={() => void onNewCode()}>
-            New code
-          </Button>
-        ) : (
-          <span className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Loader2 className="size-3 animate-spin" />
-            Waiting for the device…
-          </span>
-        )}
-        <Button variant="ghost" size="sm" className="ml-auto" onClick={onClose}>
           Cancel
         </Button>
       </div>
