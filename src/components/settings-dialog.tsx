@@ -112,7 +112,9 @@ export function SettingsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-2xl">
+      {/* One column capped at the dialog's width: on a phone the tab row is wider
+          than the screen and would otherwise widen the whole dialog. */}
+      <DialogContent className="grid-cols-[minmax(0,1fr)] gap-0 overflow-hidden p-0 sm:max-w-2xl">
         <DialogHeader className="border-b p-4">
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription className="sr-only">
@@ -127,7 +129,7 @@ export function SettingsDialog({
           <nav
             role="tablist"
             aria-orientation="vertical"
-            className="flex shrink-0 gap-1 p-2 max-sm:border-b sm:w-40 sm:flex-col sm:border-r"
+            className="flex shrink-0 gap-1 p-2 max-sm:overflow-x-auto max-sm:border-b sm:w-40 sm:flex-col sm:border-r"
           >
             {TABS.map(({ id, label, icon: Icon }) => (
               <Button

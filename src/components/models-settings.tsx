@@ -86,7 +86,7 @@ const SPEECH_PROVIDERS: ProviderMeta[] = [
   {
     id: "soniox",
     name: "Soniox",
-    description: "Speech to text for devices' voice mode: what a device hears becomes text for its agent.",
+    description: "Speech to text for devices' voice mode.",
     icon: Mic,
     keyPlaceholder: "Your Soniox API key",
     keyHelp: "Create an API key in the Soniox console (console.soniox.com).",
@@ -107,8 +107,10 @@ export function ModelsSettings() {
     )
   }
 
+  // One column capped at the pane's width: the cards' one-line descriptions
+  // (truncate) would otherwise size the column to their full text and overflow.
   return (
-    <div className="grid gap-3">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-3">
       <DefaultModelSection />
       <Separator />
       <p className="text-xs text-muted-foreground">
