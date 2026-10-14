@@ -1044,7 +1044,7 @@ const DEVICES_URL = "/agent/devices"
 // their provider ("model@endpoint").
 export type DeviceModelSlot = { provider: ProviderType | null; model: string | null }
 
-export type DeviceTool = "speak" | "zoom" | "takePicture" | "searchObservations"
+export type DeviceTool = "speak" | "zoom" | "takePicture" | "searchObservations" | "connectors"
 export type SpeechProvider = "piper" | "openai" | "soniox"
 
 // lib/devices/settings.ts on the backend; only the fields the page edits are typed.

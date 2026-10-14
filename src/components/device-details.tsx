@@ -161,8 +161,8 @@ export function DeviceDetails({
       <Separator />
 
       <section className="grid grid-cols-[minmax(0,1fr)] gap-3">
-        <SectionTitle title="Tools" description="What the agent may do with this device, besides memory and notes." />
-        {DEVICE_TOOLS.filter((tool) => caps[tool.needs]).map((tool) => (
+        <SectionTitle title="Tools" description="What the agent may do with this device, besides memory, notes and web search." />
+        {DEVICE_TOOLS.filter((tool) => !tool.needs || caps[tool.needs]).map((tool) => (
           <SwitchRow
             key={tool.key}
             id={`${device.id}-tool-${tool.key}`}

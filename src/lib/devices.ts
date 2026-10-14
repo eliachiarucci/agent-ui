@@ -46,7 +46,7 @@ export const DEVICE_TOOLS: ReadonlyArray<{
   key: DeviceTool
   label: string
   description: string
-  needs: "camera" | "speaker"
+  needs: "camera" | "speaker" | null
 }> = [
   { key: "speak", label: "Speak", description: "Say something through the speaker on its own.", needs: "speaker" },
   { key: "zoom", label: "Zoom", description: "Look closer at part of the newest frame.", needs: "camera" },
@@ -61,6 +61,13 @@ export const DEVICE_TOOLS: ReadonlyArray<{
     label: "Search the timeline",
     description: "Look up what the camera saw earlier.",
     needs: "camera",
+  },
+  {
+    key: "connectors",
+    label: "Connectors",
+    description:
+      "Gmail and Calendar, with the agent's permissions from Settings → Tools. Anyone near the device can ask; \"Ask\" tools run after a spoken yes.",
+    needs: null,
   },
 ]
 
