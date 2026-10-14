@@ -165,8 +165,9 @@ export function attachmentsFromParts(parts: UIMessage["parts"]): Attachment[] {
 }
 
 // The server prepends a machine-inserted <relevant-memories> text part to user
-// messages (see agent/docs/memory.md), and attached files ride along as an
-// <attached-files> part; both are model context, not user input, and must be
+// messages (see agent/docs/memory.md), attached files ride along as an
+// <attached-files> part, and a device's voice turns carry the agent's
+// <triggers> list; all are model context, not user input, and must be
 // excluded anywhere user text is displayed or echoed back to the server.
 export function isVisibleTextPart(
   part: UIMessage["parts"][number]
@@ -174,6 +175,7 @@ export function isVisibleTextPart(
   return (
     part.type === "text" &&
     !part.text.startsWith("<relevant-memories>") &&
+    !part.text.startsWith("<triggers>") &&
     !part.text.startsWith(ATTACHMENTS_MARKER)
   )
 }
@@ -1144,4 +1146,29 @@ export function createDevicePairing(id: string): Promise<DevicePairing> {
 
 export function cancelDevicePairing(id: string): Promise<void> {
   return request<void>(`${DEVICES_URL}/pairing?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+// Something the device's agent set aside (plan 4.12): a reminder at a time
+// ("at") or a watch for something in view ("seen").
+export type DeviceTrigger = {
+  id: string
+  kind: "at" | "seen"
+  note: string
+  what: string | null
+  at: string | null
+  repeat: boolean
+  expiresAt: string
+  source: "voice" | "run"
+  createdAt: string
+}
+
+export function listDeviceTriggers(id: string): Promise<DeviceTrigger[]> {
+  return request<DeviceTrigger[]>(`${DEVICES_URL}/triggers?id=${encodeURIComponent(id)}`)
+}
+
+export function deleteDeviceTrigger(id: string, trigger: string): Promise<void> {
+  return request<void>(
+    `${DEVICES_URL}/triggers?id=${encodeURIComponent(id)}&trigger=${encodeURIComponent(trigger)}`,
+    { method: "DELETE" }
+  )
 }

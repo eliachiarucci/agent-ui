@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ModelPicker } from "@/components/model-picker"
+import { DeviceTriggers } from "@/components/device-triggers"
 import type { Agent, Device, DeviceSettingsPatch, SpeechProvider } from "@/lib/api"
 import { DEVICE_JOBS, DEVICE_TOOLS, deviceCapabilities } from "@/lib/devices"
 
@@ -181,6 +182,16 @@ export function DeviceDetails({
             }
           />
         ))}
+      </section>
+
+      <Separator />
+
+      <section className="grid grid-cols-[minmax(0,1fr)] gap-3">
+        <SectionTitle
+          title="Set aside"
+          description="Reminders and watches the agent set when asked (“tell me when the cat comes”). When one fires, the agent tells them in the device's conversation, and out loud."
+        />
+        <DeviceTriggers device={device} />
       </section>
 
       {caps.speaker && (
