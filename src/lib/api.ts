@@ -765,9 +765,8 @@ export type ProviderSettingsInput = {
   url?: string
   apiKey?: string
   model?: string
-  // OpenRouter only: endpoint, endpoints allowed to serve requests, zero data retention.
+  // OpenRouter only: API endpoint and zero data retention.
   region?: "global" | "eu"
-  allowedProviders?: string[]
   zdr?: boolean
 }
 
@@ -781,7 +780,6 @@ export type ProviderConfig = {
     model?: string
     hasApiKey: boolean
     region?: "global" | "eu"
-    allowedProviders?: string[]
     zdr?: boolean
   }
   createdAt: string
@@ -806,6 +804,26 @@ export function testProvider(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ provider, settings }),
   })
+}
+
+// An endpoint that can serve an OpenRouter model. A model id pins one as
+// "model@tag", e.g. "anthropic/claude-haiku-5.5@google-vertex/europe".
+export type ProviderEndpoint = {
+  tag: string
+  provider: string
+  contextLength: number | null
+  // USD per million tokens.
+  promptPrice: number | null
+  completionPrice: number | null
+  // 0 is up, negative is degraded or down.
+  status: number | null
+}
+
+// The endpoints for an OpenRouter model, through the account's API endpoint
+// (the EU one lists only EU providers).
+export function listProviderEndpoints(model: string): Promise<{ endpoints: ProviderEndpoint[] }> {
+  const query = new URLSearchParams({ provider: "openrouter", model })
+  return request<{ endpoints: ProviderEndpoint[] }>(`/agent/provider-endpoints?${query}`)
 }
 
 // The backend re-tests the connection and saves only on success (422 otherwise).
@@ -1015,4 +1033,115 @@ export function updateDefaultModel(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ default_provider: provider, default_model: model }),
   })
+}
+
+// ── Devices ─────────────────────────────────────────────────────────────────
+
+const DEVICES_URL = "/agent/devices"
+
+// A device's model for one job. null provider → the fallback (the owner's
+// default model; for voice, the agent runs' model). OpenRouter models may pin
+// their provider ("model@endpoint").
+export type DeviceModelSlot = { provider: ProviderType | null; model: string | null }
+
+export type DeviceTool = "speak" | "zoom" | "takePicture" | "searchObservations"
+export type SpeechProvider = "piper" | "openai" | "soniox"
+
+// lib/devices/settings.ts on the backend; only the fields the page edits are typed.
+export type DeviceSettings = {
+  paused: boolean
+  timezone: string | null
+  retention: { frameDays: number; observationDays: number }
+  perception: DeviceModelSlot & { enabled: boolean; framesPerHour: number }
+  agent: DeviceModelSlot & { enabled: boolean; runsPerHour: number; reflectionMin: number }
+  voice: DeviceModelSlot & { enabled: boolean }
+  speech: {
+    muted: boolean
+    provider: SpeechProvider
+    language: string
+    voices: Record<string, string>
+    quietHours: { start: string; end: string } | null
+  }
+  tools: { disabled: DeviceTool[] }
+}
+
+// What the device said it has when it last connected: a camera (frame sizes),
+// a speaker (audio formats it plays), a microphone (formats it streams).
+export type DeviceCapabilities = { sizes?: string[]; audio?: string[]; microphone?: string[] }
+
+export type Device = {
+  id: string
+  ownerId: string
+  agentId: string | null
+  name: string
+  description: string | null
+  settings: DeviceSettings
+  hello: { version: string; capabilities?: DeviceCapabilities } | null
+  lastSeenAt: string | null
+  // Set while a pairing code is waiting to be used.
+  pairingExpiresAt: string | null
+  tokenCreatedAt: string
+  createdAt: string
+  role: "owner" | "member"
+  online: boolean
+  connectedAt: string | null
+}
+
+export type DevicePairing = { code: string; expiresAt: string }
+
+// Settings are patched section by section, each section by field.
+export type DeviceSettingsPatch = {
+  paused?: boolean
+  timezone?: string | null
+  retention?: Partial<DeviceSettings["retention"]>
+  perception?: Partial<DeviceSettings["perception"]>
+  agent?: Partial<DeviceSettings["agent"]>
+  voice?: Partial<DeviceSettings["voice"]>
+  speech?: Partial<DeviceSettings["speech"]>
+  tools?: Partial<DeviceSettings["tools"]>
+}
+
+export function listDevices(): Promise<Device[]> {
+  return request<Device[]>(DEVICES_URL)
+}
+
+// Without an agent id, the backend creates an agent named after the device.
+export function createDevice(input: {
+  name: string
+  description?: string
+  agent_id?: string
+}): Promise<{ device: Device; pairing: DevicePairing }> {
+  return request<{ device: Device; pairing: DevicePairing }>(DEVICES_URL, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateDevice(
+  id: string,
+  changes: { name?: string; description?: string | null; agent_id?: string; settings?: DeviceSettingsPatch }
+): Promise<Device> {
+  return request<Device>(DEVICES_URL, {
+    method: "PATCH",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id, ...changes }),
+  })
+}
+
+export function deleteDevice(id: string): Promise<void> {
+  return request<void>(`${DEVICES_URL}?id=${encodeURIComponent(id)}`, { method: "DELETE" })
+}
+
+// A new one-time code to pair the device with (any earlier code stops working).
+export function createDevicePairing(id: string): Promise<DevicePairing> {
+  return request<DevicePairing>(`${DEVICES_URL}/pairing`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ id }),
+  })
+}
+
+export function cancelDevicePairing(id: string): Promise<void> {
+  return request<void>(`${DEVICES_URL}/pairing?id=${encodeURIComponent(id)}`, { method: "DELETE" })
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { Bot, Boxes, Brain, Download, Info, Plus, Trash2, UserRound, Wrench } from "lucide-react"
+import { Bot, Boxes, Brain, Cpu, Download, Info, Plus, Trash2, UserRound, Wrench } from "lucide-react"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -35,6 +35,7 @@ import {
 import { AgentSwitcher } from "@/components/agent-switcher"
 import { AccountSettings } from "@/components/auth/account-settings"
 import { MemoryPoolsSettings } from "@/components/memory-pools-settings"
+import { DevicesSettings } from "@/components/devices-settings"
 import { ModelsSettings } from "@/components/models-settings"
 import { ToolsSettings } from "@/components/tools-settings"
 import { ModelPicker } from "@/components/model-picker"
@@ -83,6 +84,7 @@ const TABS = [
   { id: "agent", label: "Agent", icon: Bot },
   { id: "memory", label: "Memory", icon: Brain },
   { id: "models", label: "Models", icon: Boxes },
+  { id: "devices", label: "Devices", icon: Cpu },
   { id: "tools", label: "Tools", icon: Wrench },
   { id: "account", label: "Account", icon: UserRound },
   { id: "general", label: "General", icon: Info },
@@ -165,6 +167,8 @@ export function SettingsDialog({
               <MemoryPoolsSettings onPoolsChanged={onRefreshAgents} />
             ) : tab === "models" ? (
               <ModelsSettings />
+            ) : tab === "devices" ? (
+              <DevicesSettings agents={agents} onAgentsChanged={onRefreshAgents} />
             ) : tab === "tools" ? (
               <ToolsSettings agents={agents} activeAgentId={activeAgentId} />
             ) : tab === "account" ? (

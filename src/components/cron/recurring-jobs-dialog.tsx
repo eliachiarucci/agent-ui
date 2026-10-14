@@ -2,9 +2,7 @@ import { useEffect, useState } from "react"
 import {
   ArrowLeft,
   CalendarClock,
-  Check,
   CheckCircle2,
-  ChevronDown,
   ChevronsUpDown,
   Loader2,
   Pause,
@@ -45,15 +43,14 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useCronJobs } from "@/hooks/use-cron-jobs"
-import { useProviders } from "@/hooks/use-providers"
+import { ModelMenuItems } from "@/components/model-menu"
+import { modelLabel } from "@/lib/model-label"
 import {
-  testProvider,
   type Agent,
   type CronAskPolicy,
   type CronJob,
   type CronJobRun,
   type CronRecurrence,
-  type ModelProviderConfig,
   type ProviderType,
 } from "@/lib/api"
 import { cn } from "@/lib/utils"
@@ -83,16 +80,6 @@ const RECURRENCE_LABELS: Record<CronRecurrence, string> = {
   weekly: "Every week",
   biweekly: "Every 2 weeks",
   monthly: "Every month",
-}
-
-const PROVIDER_LABELS: Record<ProviderType, string> = {
-  lmstudio: "LM Studio",
-  anthropic: "Anthropic",
-  google: "Google",
-  deepinfra: "DeepInfra",
-  tensorx: "TensorX",
-  openrouter: "OpenRouter",
-  openai: "OpenAI",
 }
 
 function scheduleSummary(job: CronJob): string {
@@ -348,7 +335,7 @@ function JobCard({
           {job.provider && job.model && (
             <>
               {" · "}
-              {PROVIDER_LABELS[job.provider]} · {job.model}
+              {modelLabel({ provider: job.provider, model: job.model })}
             </>
           )}
         </p>
@@ -446,102 +433,20 @@ function RunCard({ run, onOpen }: { run: CronJobRun; onOpen?: () => void }) {
 
 type JobModel = { provider: ProviderType; model: string } | null
 
-// Same provider → live model list flow as the chat's status-bar selector
-// (components/chat/model-selector.tsx), but writing to form state instead of
-// the global active-model store.
+// The same menu as the chat's status-bar selector (ModelMenuItems), writing to
+// form state instead of the global active-model store.
 function ModelPicker({ value, onChange }: { value: JobModel; onChange: (v: JobModel) => void }) {
-  const { providers } = useProviders()
-  const [expanded, setExpanded] = useState<ProviderType | null>(null)
-  // undefined = not fetched yet, "loading" = in flight, [] = fetched but empty.
-  const [modelsByProvider, setModelsByProvider] = useState<
-    Partial<Record<ProviderType, string[] | "loading">>
-  >({})
-
-  const label = value ? `${PROVIDER_LABELS[value.provider]} · ${value.model}` : "Default model"
-
-  const toggleProvider = async (config: ModelProviderConfig) => {
-    const provider = config.provider
-    setExpanded((cur) => (cur === provider ? null : provider))
-    if (modelsByProvider[provider] !== undefined) return
-    setModelsByProvider((cur) => ({ ...cur, [provider]: "loading" }))
-    // The stored API key is filled in server-side; LM Studio just needs its URL.
-    const { models } = await testProvider(
-      provider,
-      provider === "lmstudio" ? { url: config.settings.url } : {}
-    ).catch(() => ({ models: [] as string[] }))
-    const sorted = [...models].sort((a, b) =>
-      a.localeCompare(b, undefined, { sensitivity: "base" })
-    )
-    setModelsByProvider((cur) => ({ ...cur, [provider]: sorted }))
-  }
+  const label = value ? modelLabel(value) : "Default model"
 
   return (
-    <DropdownMenu
-      onOpenChange={(open) => {
-        // Fresh model lists (LM Studio's change as models load) per menu open.
-        if (open) {
-          setExpanded(null)
-          setModelsByProvider({})
-        }
-      }}
-    >
-      <DropdownMenuTrigger className="flex h-9 w-full items-center justify-between gap-2 rounded-md border bg-transparent px-3 text-sm outline-none hover:bg-accent/40 data-[state=open]:bg-accent/40">
-        <span className="truncate">{label}</span>
+    <DropdownMenu>
+      <DropdownMenuTrigger className="flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border bg-transparent px-3 text-sm outline-none hover:bg-accent/40 data-[state=open]:bg-accent/40">
+        <span className="truncate" title={label}>{label}</span>
         <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
         <DropdownMenuLabel className="text-xs">Model</DropdownMenuLabel>
-        {providers.length === 0 && (
-          <div className="px-2 py-1.5 text-xs text-muted-foreground">
-            No providers configured — add one in Settings → Models.
-          </div>
-        )}
-        {providers.map((config) => {
-          const provider = config.provider
-          const models = modelsByProvider[provider]
-          const isExpanded = expanded === provider
-          return (
-            <div key={provider}>
-              <DropdownMenuItem
-                // Providers expand in place; only model clicks close the menu.
-                onSelect={(e) => {
-                  e.preventDefault()
-                  void toggleProvider(config)
-                }}
-              >
-                <ChevronDown
-                  className={cn("size-3.5 transition-transform", !isExpanded && "-rotate-90")}
-                />
-                {PROVIDER_LABELS[provider]}
-              </DropdownMenuItem>
-              {isExpanded &&
-                (models === "loading" || models === undefined ? (
-                  <div className="flex items-center gap-2 py-1.5 pl-8 pr-2 text-xs text-muted-foreground">
-                    <Loader2 className="size-3 animate-spin" />
-                    Loading models…
-                  </div>
-                ) : models.length === 0 ? (
-                  <div className="py-1.5 pl-8 pr-2 text-xs text-muted-foreground">
-                    No models available.
-                  </div>
-                ) : (
-                  models.map((model) => {
-                    const isActive = value?.provider === provider && value.model === model
-                    return (
-                      <DropdownMenuItem
-                        key={model}
-                        className="pl-8 text-xs"
-                        onSelect={() => onChange({ provider, model })}
-                      >
-                        <span className="truncate">{model}</span>
-                        {isActive && <Check className="ml-auto size-3.5 shrink-0" />}
-                      </DropdownMenuItem>
-                    )
-                  })
-                ))}
-            </div>
-          )
-        })}
+        <ModelMenuItems selected={value} onSelect={onChange} />
         {value && (
           <>
             <DropdownMenuSeparator />

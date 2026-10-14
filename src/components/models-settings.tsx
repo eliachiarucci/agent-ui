@@ -214,10 +214,10 @@ function ProviderCard({
 
   const [url, setUrl] = useState(config?.settings.url ?? (meta.id === "lmstudio" ? "http://localhost:1234" : ""))
   const [apiKey, setApiKey] = useState("")
-  // OpenRouter routing, applied by the server to every request with this key.
+  // OpenRouter's API endpoint and ZDR, applied by the server to every request
+  // with this key. Which provider serves a model is picked with the model.
   const isOpenRouter = meta.id === "openrouter"
   const [region, setRegion] = useState<"global" | "eu">(config?.settings.region ?? "global")
-  const [allowed, setAllowed] = useState((config?.settings.allowedProviders ?? []).join(", "))
   const [zdr, setZdr] = useState(config?.settings.zdr ?? false)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -229,11 +229,7 @@ function ProviderCard({
     ...(meta.id === "lmstudio" && { url: url.trim() }),
     // Omitted keys fall back to the stored one server-side.
     ...(apiKey.trim() && { apiKey: apiKey.trim() }),
-    ...(isOpenRouter && {
-      region,
-      allowedProviders: allowed.split(/[,\s]+/).filter(Boolean),
-      zdr,
-    }),
+    ...(isOpenRouter && { region, zdr }),
   })
 
   // Key-only providers need a key (typed now or already stored); LM Studio
@@ -345,22 +341,9 @@ function ProviderCard({
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  EU keeps OpenRouter&apos;s own processing in the EU. It needs a Business or
-                  Enterprise plan.
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="openrouter-allowed">Allowed providers</Label>
-                <Input
-                  id="openrouter-allowed"
-                  value={allowed}
-                  placeholder="google-vertex/europe"
-                  onChange={(e) => setAllowed(e.target.value)}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Endpoint tags that may serve requests, separated by commas (listed on each
-                  model&apos;s Providers page on OpenRouter). Every request is pinned to them, with
-                  no fallback. Empty: any provider.
+                  EU keeps OpenRouter&apos;s own processing in the EU, and offers only EU
+                  providers. It needs a Business or Enterprise plan. Pick the provider of each
+                  model next to the model.
                 </p>
               </div>
               <div className="flex items-center justify-between gap-3">
