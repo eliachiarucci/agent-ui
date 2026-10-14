@@ -765,6 +765,10 @@ export type ProviderSettingsInput = {
   url?: string
   apiKey?: string
   model?: string
+  // OpenRouter only: endpoint, endpoints allowed to serve requests, zero data retention.
+  region?: "global" | "eu"
+  allowedProviders?: string[]
+  zdr?: boolean
 }
 
 // Stored config as returned by the backend. API keys never come back; the
@@ -772,7 +776,14 @@ export type ProviderSettingsInput = {
 export type ProviderConfig = {
   id: string
   provider: StoredProviderType
-  settings: { url?: string; model?: string; hasApiKey: boolean }
+  settings: {
+    url?: string
+    model?: string
+    hasApiKey: boolean
+    region?: "global" | "eu"
+    allowedProviders?: string[]
+    zdr?: boolean
+  }
   createdAt: string
   updatedAt: string
 }

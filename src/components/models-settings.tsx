@@ -4,6 +4,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ModelPicker, type ModelSelection } from "@/components/model-picker"
@@ -212,6 +214,11 @@ function ProviderCard({
 
   const [url, setUrl] = useState(config?.settings.url ?? (meta.id === "lmstudio" ? "http://localhost:1234" : ""))
   const [apiKey, setApiKey] = useState("")
+  // OpenRouter routing, applied by the server to every request with this key.
+  const isOpenRouter = meta.id === "openrouter"
+  const [region, setRegion] = useState<"global" | "eu">(config?.settings.region ?? "global")
+  const [allowed, setAllowed] = useState((config?.settings.allowedProviders ?? []).join(", "))
+  const [zdr, setZdr] = useState(config?.settings.zdr ?? false)
   const [testing, setTesting] = useState(false)
   const [saving, setSaving] = useState(false)
   const [removing, setRemoving] = useState(false)
@@ -222,6 +229,11 @@ function ProviderCard({
     ...(meta.id === "lmstudio" && { url: url.trim() }),
     // Omitted keys fall back to the stored one server-side.
     ...(apiKey.trim() && { apiKey: apiKey.trim() }),
+    ...(isOpenRouter && {
+      region,
+      allowedProviders: allowed.split(/[,\s]+/).filter(Boolean),
+      zdr,
+    }),
   })
 
   // Key-only providers need a key (typed now or already stored); LM Studio
@@ -318,6 +330,50 @@ function ProviderCard({
               <p className="text-xs text-muted-foreground">{meta.keyHelp}</p>
             )}
           </div>
+
+          {isOpenRouter && (
+            <>
+              <div className="grid gap-2">
+                <Label htmlFor="openrouter-region">Endpoint</Label>
+                <Select value={region} onValueChange={(v) => setRegion(v as "global" | "eu")}>
+                  <SelectTrigger id="openrouter-region" className="w-full">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="global">Global (openrouter.ai)</SelectItem>
+                    <SelectItem value="eu">EU (eu.openrouter.ai)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  EU keeps OpenRouter&apos;s own processing in the EU. It needs a Business or
+                  Enterprise plan.
+                </p>
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="openrouter-allowed">Allowed providers</Label>
+                <Input
+                  id="openrouter-allowed"
+                  value={allowed}
+                  placeholder="google-vertex/europe"
+                  onChange={(e) => setAllowed(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Endpoint tags that may serve requests, separated by commas (listed on each
+                  model&apos;s Providers page on OpenRouter). Every request is pinned to them, with
+                  no fallback. Empty: any provider.
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="grid min-w-0 gap-1">
+                  <Label htmlFor="openrouter-zdr">Zero data retention</Label>
+                  <p className="text-xs text-muted-foreground">
+                    Only endpoints that don&apos;t keep your prompts.
+                  </p>
+                </div>
+                <Switch id="openrouter-zdr" checked={zdr} onCheckedChange={setZdr} />
+              </div>
+            </>
+          )}
 
           {testedModels !== null && (
             <p className="text-xs text-muted-foreground">
